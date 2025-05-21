@@ -3,8 +3,9 @@
 
 JSONObject[] mapData = new JSONObject[3];
 JSONArray currentObstacles;
+JSONArray currentPlayers;
 int currentMap = 0;
-String mapfilesBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
+String mapFileBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
 String[] mapFiles = {"map1_crossroads.json", "map2_fortress.json", "map3_maze.json"};
 String[] mapNames = new String[3];
 String[] mapDescriptions = new String[3];
@@ -48,6 +49,9 @@ void draw() {
   // Render current map obstacles
   renderObstacles();
   
+  // Render player spawn points
+  renderPlayers();
+  
   // Display UI
   drawUI();
 }
@@ -58,7 +62,7 @@ void loadAllMaps() {
   for (int i = 0; i < mapFiles.length; i++) {
     try {
       println("Loading " + mapFiles[i] + "...");
-      mapData[i] = loadJSONObject(mapfilesBasePath + mapFiles[i]);
+      mapData[i] = loadJSONObject(mapFileBasePath + mapFiles[i]);
       
       if (mapData[i] != null) {
         // Extract map name and description
@@ -86,7 +90,14 @@ void loadMap(int mapIndex) {
   
   try {
     currentObstacles = mapData[mapIndex].getJSONArray("obstacles");
-    println("Loaded map: " + mapNames[mapIndex] + " (" + currentObstacles.size() + " obstacles)");
+    currentPlayers = mapData[mapIndex].getJSONArray("players");
+    
+    // Validate players array
+    if (currentPlayers.size() != 2) {
+      println("WARNING: Map " + mapNames[mapIndex] + " should have exactly 2 players, found " + currentPlayers.size());
+    }
+    
+    println("Loaded map: " + mapNames[mapIndex] + " (" + currentObstacles.size() + " obstacles, " + currentPlayers.size() + " players)");
   } catch (Exception e) {
     println("Error loading map " + mapIndex + ": " + e.getMessage());
   }
@@ -161,6 +172,61 @@ void renderSphere(JSONObject sphere) {
   ellipse(x, y, radius * 2, radius * 2);
 }
 
+void renderPlayers() {
+  if (currentPlayers == null) return;
+  
+  for (int i = 0; i < currentPlayers.size(); i++) {
+    JSONObject player = currentPlayers.getJSONObject(i);
+    JSONObject position = player.getJSONObject("position");
+    float orientation = player.getFloat("orientation");
+    int playerId = player.getInt("id");
+    
+    float x = position.getFloat("x");
+    float y = position.getFloat("y");
+    
+    // Set player colors
+    if (playerId == 1) {
+      fill(255, 100, 100); // Red for Player 1
+      stroke(255, 150, 150);
+    } else {
+      fill(100, 100, 255); // Blue for Player 2
+      stroke(150, 150, 255);
+    }
+    
+    strokeWeight(2);
+    
+    // Draw tank body (rectangle)
+    pushMatrix();
+    translate(x, y);
+    rotate(radians(orientation));
+    
+    rectMode(CENTER);
+    rect(0, 0, 20, 14);
+    
+    // Draw tank barrel (line extending forward)
+    stroke(255, 255, 255);
+    strokeWeight(3);
+    line(0, 0, 15, 0);
+    
+    popMatrix();
+    
+    // Draw player label
+    fill(255, 255, 255);
+    textAlign(CENTER);
+    textSize(10);
+    text("P" + playerId, x, y - 20);
+    
+    // Draw orientation indicator (small arrow)
+    fill(255, 255, 0);
+    noStroke();
+    pushMatrix();
+    translate(x, y);
+    rotate(radians(orientation));
+    triangle(18, 0, 12, -3, 12, 3);
+    popMatrix();
+  }
+}
+
 void renderTriangle(JSONObject triangle) {
   JSONArray vertices = triangle.getJSONArray("vertices");
   
@@ -225,7 +291,7 @@ void drawErrorScreen() {
   textSize(12);
   fill(200, 200, 200);
   for (int i = 0; i < mapFiles.length; i++) {
-    text("• " + mapfilesBasePath + mapFiles[i], width/2, height/2 + 30 + i*15);
+    text("• " + mapFileBasePath + mapFiles[i], width/2, height/2 + 30 + i*15);
   }
   
   textSize(10);
@@ -272,6 +338,12 @@ void keyPressed() {
       for (int i = 0; i < currentObstacles.size(); i++) {
         JSONObject obstacle = currentObstacles.getJSONObject(i);
         println("  " + i + ": " + obstacle.getString("kind"));
+      }
+      println("Players: " + currentPlayers.size());
+      for (int i = 0; i < currentPlayers.size(); i++) {
+        JSONObject player = currentPlayers.getJSONObject(i);
+        JSONObject pos = player.getJSONObject("position");
+        println("  Player " + player.getInt("id") + ": (" + pos.getFloat("x") + ", " + pos.getFloat("y") + ") facing " + player.getFloat("orientation") + "°");
       }
     }
   }

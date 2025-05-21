@@ -1,6 +1,26 @@
 {
   "name": "Cross Roads",
   "description": "Classic crossroads design with open combat and strategic positioning",
+  "players": [
+    {
+      "id": 1,
+      "name": "Player 1",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "orientation": 45
+    },
+    {
+      "id": 2,
+      "name": "Player 2",
+      "position": {
+        "x": 700,
+        "y": 500
+      },
+      "orientation": 225
+    }
+  ],
   "obstacles": [
     {
       "kind": "Rectangle",

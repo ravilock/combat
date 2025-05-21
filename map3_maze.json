@@ -1,6 +1,26 @@
 {
   "name": "Maze Runner",
   "description": "Complex maze-like battlefield with corridors and strategic bottlenecks",
+  "players": [
+    {
+      "id": 1,
+      "name": "Player 1",
+      "position": {
+        "x": 60,
+        "y": 60
+      },
+      "orientation": 315
+    },
+    {
+      "id": 2,
+      "name": "Player 2",
+      "position": {
+        "x": 740,
+        "y": 540
+      },
+      "orientation": 135
+    }
+  ],
   "obstacles": [
     {
       "kind": "Rectangle",

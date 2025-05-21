@@ -1,6 +1,26 @@
 {
   "name": "Fortress",
   "description": "Defensive stronghold layout with corner fortresses and central bunker",
+  "players": [
+    {
+      "id": 1,
+      "name": "Player 1",
+      "position": {
+        "x": 80,
+        "y": 300
+      },
+      "orientation": 0
+    },
+    {
+      "id": 2,
+      "name": "Player 2",
+      "position": {
+        "x": 720,
+        "y": 300
+      },
+      "orientation": 180
+    }
+  ],
   "obstacles": [
     {
       "kind": "Sphere",
