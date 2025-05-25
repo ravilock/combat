@@ -1,15 +1,22 @@
 // Combat Game - Multi-Map Obstacle Renderer
 // Loads maps from external JSON files
 
+// Key state tracking - add these as global variables
+boolean[] keys = new boolean[256];  // For regular keys (a-z, 0-9, etc.)
+boolean[] keyCodes = new boolean[256];  // For special keys (arrow keys, etc.)
+
 JSONObject[] mapData = new JSONObject[3];
 JSONArray currentObstacles;
 JSONArray currentPlayers;
+
 int currentMap = 0;
-String mapFileBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
+boolean mapsLoaded = false;
+
 String[] mapFiles = {"map1_crossroads.json", "map2_fortress.json", "map3_maze.json"};
 String[] mapNames = new String[3];
 String[] mapDescriptions = new String[3];
-boolean mapsLoaded = false;
+
+String mapFileBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
 
 // Player instances
 Player player1, player2;
@@ -57,6 +64,9 @@ void draw() {
   
   // Display UI
   drawUI();
+
+  // Handle movement keys
+  handleMovementKeys();
 }
 
 void loadAllMaps() {
@@ -287,6 +297,35 @@ void drawErrorScreen() {
 }
 
 void keyPressed() {
+  // Handle regular keys
+  if (key >= 0 && key < 256) {
+    keys[key] = true;
+  }
+
+  // Handle special keys (arrow keys, etc.)
+  if (keyCode >= 0 && keyCode < 256) {
+    keyCodes[keyCode] = true;
+  }
+
+  // Non-movement keys that should only trigger once
+  handleSinglePressKeys();
+}
+
+void keyReleased() {
+  // Handle regular keys
+  if (key >= 0 && key < 256) {
+    keys[key] = false;
+  }
+
+  // Handle special keys
+  if (keyCode >= 0 && keyCode < 256) {
+    keyCodes[keyCode] = false;
+  }
+}
+
+
+// Handle keys that should only trigger once per press
+void handleSinglePressKeys() {
   if (!mapsLoaded) {
     if (key == 'r' || key == 'R') {
       loadAllMaps();
@@ -296,41 +335,8 @@ void keyPressed() {
     }
     return;
   }
-  //FIXME: Better handle key events considering that pressing two keys at the same time is stopping the first key
 
-  // Player 1 controls (WASD)
-  if (player1 != null) {
-    if (key == 'w' || key == 'W') {
-      player1.moveForward();
-    }
-    if (key == 's' || key == 'S') {
-      player1.moveBackward();
-    }
-    if (key == 'a' || key == 'A') {
-      player1.rotateLeft();
-    }
-    if (key == 'd' || key == 'D') {
-      player1.rotateRight();
-    }
-  }
-
-  // Player 2 controls (Arrow keys)
-  if (player2 != null) {
-    if (keyCode == UP) {
-      player2.moveForward();
-    }
-    if (keyCode == DOWN) {
-      player2.moveBackward();
-    }
-    if (keyCode == LEFT) {
-      player2.rotateLeft();
-    }
-    if (keyCode == RIGHT) {
-      player2.rotateRight();
-    }
-  }
-
-  // Map selection
+  // Map selection (only trigger once per press)
   if (key >= '1' && key <= '3') {
     int newMap = key - '1';
     if (newMap != currentMap) {
@@ -339,7 +345,7 @@ void keyPressed() {
     }
   }
 
-  // Debug and utility functions
+  // Debug and utility functions (only trigger once per press)
   if (key == 'r' || key == 'R') {
     println("Reloading all maps...");
     loadAllMaps();
@@ -348,7 +354,6 @@ void keyPressed() {
     }
   }
 
-  // Note: Debug info moved to 'i' key to avoid conflict with player controls
   if (key == 'i' || key == 'I') {
     if (mapsLoaded && currentObstacles != null) {
       println("\n--- Map Debug Info ---");
@@ -367,6 +372,52 @@ void keyPressed() {
       }
     }
   }
+}
+
+// Call this in your main draw() loop to handle continuous movement
+void handleMovementKeys() {
+  if (!mapsLoaded) return;
+
+  // Player 1 controls (WASD) - using lowercase for consistency
+  if (player1 != null) {
+    if (keys['w'] || keys['W']) {
+      player1.moveForward();
+    }
+    if (keys['s'] || keys['S']) {
+      player1.moveBackward();
+    }
+    if (keys['a'] || keys['A']) {
+      player1.rotateLeft();
+    }
+    if (keys['d'] || keys['D']) {
+      player1.rotateRight();
+    }
+  }
+
+  // Player 2 controls (Arrow keys)
+  if (player2 != null) {
+    if (keyCodes[UP]) {
+      player2.moveForward();
+    }
+    if (keyCodes[DOWN]) {
+      player2.moveBackward();
+    }
+    if (keyCodes[LEFT]) {
+      player2.rotateLeft();
+    }
+    if (keyCodes[RIGHT]) {
+      player2.rotateRight();
+    }
+  }
+}
+
+// Alternative: Helper functions to check key states
+boolean isKeyPressed(char k) {
+  return keys[k];
+}
+
+boolean isKeyCodePressed(int code) {
+  return keyCodes[code];
 }
 
 // player info
