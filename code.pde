@@ -11,6 +11,9 @@ String[] mapNames = new String[3];
 String[] mapDescriptions = new String[3];
 boolean mapsLoaded = false;
 
+// Player instances
+Player player1, player2;
+
 void setup() {
   size(800, 600);
   
@@ -87,16 +90,19 @@ void loadMap(int mapIndex) {
   if (!mapsLoaded || mapIndex < 0 || mapIndex >= mapData.length) {
     return;
   }
-  
+
   try {
     currentObstacles = mapData[mapIndex].getJSONArray("obstacles");
     currentPlayers = mapData[mapIndex].getJSONArray("players");
-    
+
     // Validate players array
     if (currentPlayers.size() != 2) {
       println("WARNING: Map " + mapNames[mapIndex] + " should have exactly 2 players, found " + currentPlayers.size());
     }
-    
+
+    // Create Player instances from JSON data
+    createPlayersFromJSON();
+
     println("Loaded map: " + mapNames[mapIndex] + " (" + currentObstacles.size() + " obstacles, " + currentPlayers.size() + " players)");
   } catch (Exception e) {
     println("Error loading map " + mapIndex + ": " + e.getMessage());
@@ -172,58 +178,39 @@ void renderSphere(JSONObject sphere) {
   ellipse(x, y, radius * 2, radius * 2);
 }
 
+void createPlayersFromJSON() {
+  if (currentPlayers == null || currentPlayers.size() < 2) {
+    println("Error: Not enough player data in JSON");
+    return;
+  }
+
+  // Create Player 1
+  JSONObject p1Data = currentPlayers.getJSONObject(0);
+  JSONObject p1Pos = p1Data.getJSONObject("position");
+  player1 = new Player(
+    p1Data.getInt("id"),
+    p1Pos.getFloat("x"),
+    p1Pos.getFloat("y"),
+    p1Data.getFloat("orientation")
+  );
+
+  // Create Player 2
+  JSONObject p2Data = currentPlayers.getJSONObject(1);
+  JSONObject p2Pos = p2Data.getJSONObject("position");
+  player2 = new Player(
+    p2Data.getInt("id"),
+    p2Pos.getFloat("x"),
+    p2Pos.getFloat("y"),
+    p2Data.getFloat("orientation")
+  );
+}
+
 void renderPlayers() {
-  if (currentPlayers == null) return;
-  
-  for (int i = 0; i < currentPlayers.size(); i++) {
-    JSONObject player = currentPlayers.getJSONObject(i);
-    JSONObject position = player.getJSONObject("position");
-    float orientation = player.getFloat("orientation");
-    int playerId = player.getInt("id");
-    
-    float x = position.getFloat("x");
-    float y = position.getFloat("y");
-    
-    // Set player colors
-    if (playerId == 1) {
-      fill(255, 100, 100); // Red for Player 1
-      stroke(255, 150, 150);
-    } else {
-      fill(100, 100, 255); // Blue for Player 2
-      stroke(150, 150, 255);
-    }
-    
-    strokeWeight(2);
-    
-    // Draw tank body (rectangle)
-    pushMatrix();
-    translate(x, y);
-    rotate(radians(orientation));
-    
-    rectMode(CENTER);
-    rect(0, 0, 20, 14);
-    
-    // Draw tank barrel (line extending forward)
-    stroke(255, 255, 255);
-    strokeWeight(3);
-    line(0, 0, 15, 0);
-    
-    popMatrix();
-    
-    // Draw player label
-    fill(255, 255, 255);
-    textAlign(CENTER);
-    textSize(10);
-    text("P" + playerId, x, y - 20);
-    
-    // Draw orientation indicator (small arrow)
-    fill(255, 255, 0);
-    noStroke();
-    pushMatrix();
-    translate(x, y);
-    rotate(radians(orientation));
-    triangle(18, 0, 12, -3, 12, 3);
-    popMatrix();
+  if (player1 != null) {
+    player1.display();
+  }
+  if (player2 != null) {
+    player2.display();
   }
 }
 
@@ -309,7 +296,40 @@ void keyPressed() {
     }
     return;
   }
-  
+  //FIXME: Better handle key events considering that pressing two keys at the same time is stopping the first key
+
+  // Player 1 controls (WASD)
+  if (player1 != null) {
+    if (key == 'w' || key == 'W') {
+      player1.moveForward();
+    }
+    if (key == 's' || key == 'S') {
+      player1.moveBackward();
+    }
+    if (key == 'a' || key == 'A') {
+      player1.rotateLeft();
+    }
+    if (key == 'd' || key == 'D') {
+      player1.rotateRight();
+    }
+  }
+
+  // Player 2 controls (Arrow keys)
+  if (player2 != null) {
+    if (keyCode == UP) {
+      player2.moveForward();
+    }
+    if (keyCode == DOWN) {
+      player2.moveBackward();
+    }
+    if (keyCode == LEFT) {
+      player2.rotateLeft();
+    }
+    if (keyCode == RIGHT) {
+      player2.rotateRight();
+    }
+  }
+
   // Map selection
   if (key >= '1' && key <= '3') {
     int newMap = key - '1';
@@ -318,7 +338,7 @@ void keyPressed() {
       loadMap(currentMap);
     }
   }
-  
+
   // Debug and utility functions
   if (key == 'r' || key == 'R') {
     println("Reloading all maps...");
@@ -327,8 +347,9 @@ void keyPressed() {
       loadMap(currentMap);
     }
   }
-  
-  if (key == 'd' || key == 'D') {
+
+  // Note: Debug info moved to 'i' key to avoid conflict with player controls
+  if (key == 'i' || key == 'I') {
     if (mapsLoaded && currentObstacles != null) {
       println("\n--- Map Debug Info ---");
       println("Current Map: " + mapNames[currentMap]);
@@ -340,11 +361,110 @@ void keyPressed() {
         println("  " + i + ": " + obstacle.getString("kind"));
       }
       println("Players: " + currentPlayers.size());
-      for (int i = 0; i < currentPlayers.size(); i++) {
-        JSONObject player = currentPlayers.getJSONObject(i);
-        JSONObject pos = player.getJSONObject("position");
-        println("  Player " + player.getInt("id") + ": (" + pos.getFloat("x") + ", " + pos.getFloat("y") + ") facing " + player.getFloat("orientation") + "°");
+      if (player1 != null && player2 != null) {
+        println("  Player 1: (" + player1.x + ", " + player1.y + ") facing " + player1.orientation + "°");
+        println("  Player 2: (" + player2.x + ", " + player2.y + ") facing " + player2.orientation + "°");
       }
     }
+  }
+}
+
+// player info
+
+class Player {
+  private int id;
+  private float x, y;
+  private float orientation;
+  private float speed = 2.0;
+  private float rotationSpeed = 3.0;
+
+  Player(int id, float x, float y, float orientation) {
+    this.id = id;
+    this.x = x;
+    this.y = y;
+    this.orientation = orientation;
+  }
+
+  public void display() {
+    // Set player colors
+    if (id == 1) {
+      fill(255, 100, 100); // Red for Player 1
+      stroke(255, 150, 150);
+    } else {
+      fill(100, 100, 255); // Blue for Player 2
+      stroke(150, 150, 255);
+    }
+
+    strokeWeight(2);
+
+    // Draw tank body (rectangle)
+    pushMatrix();
+    translate(x, y);
+    rotate(radians(orientation));
+
+    rectMode(CENTER);
+    rect(0, 0, 20, 14);
+
+    // Draw tank barrel (line extending forward)
+    stroke(255, 255, 255);
+    strokeWeight(3);
+    line(0, 0, 15, 0);
+
+    popMatrix();
+
+    // Draw player label
+    fill(255, 255, 255);
+    textAlign(CENTER);
+    textSize(10);
+    text("P" + id, x, y - 20);
+
+    // Draw orientation indicator (small arrow)
+    fill(255, 255, 0);
+    noStroke();
+    pushMatrix();
+    translate(x, y);
+    rotate(radians(orientation));
+    triangle(18, 0, 12, -3, 12, 3);
+    popMatrix();
+  }
+
+  public void moveForward() {
+    float dx = cos(radians(orientation)) * speed;
+    float dy = sin(radians(orientation)) * speed;
+
+    // Keep players within arena bounds
+    float newX = x + dx;
+    float newY = y + dy;
+
+    if (newX > 30 && newX < width - 30) {
+      x = newX;
+    }
+    if (newY > 30 && newY < height - 30) {
+      y = newY;
+    }
+  }
+
+  public void moveBackward() {
+    float dx = cos(radians(orientation)) * speed;
+    float dy = sin(radians(orientation)) * speed;
+
+    // Keep players within arena bounds
+    float newX = x - dx;
+    float newY = y - dy;
+
+    if (newX > 30 && newX < width - 30) {
+      x = newX;
+    }
+    if (newY > 30 && newY < height - 30) {
+      y = newY;
+    }
+  }
+
+  public void rotateLeft() {
+    orientation -= rotationSpeed;
+  }
+
+  public void rotateRight() {
+    orientation += rotationSpeed;
   }
 }
