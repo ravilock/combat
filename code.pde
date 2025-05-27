@@ -499,12 +499,14 @@ class Bullet {
   private int playerId;
   private boolean shouldRemove = false;
   private float size = 6; // Small square bullet
+  private SphereCollider collider; // Use sphere collider for bullets
   
   public Bullet(float startX, float startY, float angle, int playerId) {
     this.x = startX;
     this.y = startY;
     this.angle = angle;
     this.playerId = playerId;
+    this.collider = new SphereCollider(x, y, size/2); // Radius is half the size
   }
   
   public void update() {
@@ -512,15 +514,18 @@ class Bullet {
     x += cos(radians(angle)) * speed;
     y += sin(radians(angle)) * speed;
     
+    // Update collider position
+    collider.updatePosition(x, y);
+    
     // Check bounds
     if (x < 20 || x > width - 20 || y < 20 || y > height - 20) {
       shouldRemove = true;
       return;
     }
     
-    // Check collision with players
+    // Check collision with players using colliders
     if (player1 != null && playerId != 1) {
-      if (isCollidingWithPlayer(player1)) {
+      if (collider.isCollidingWith(player1.getCollider())) {
         println("Player 1 hit by Player " + playerId + "'s bullet!");
         shouldRemove = true;
         return;
@@ -528,14 +533,14 @@ class Bullet {
     }
     
     if (player2 != null && playerId != 2) {
-      if (isCollidingWithPlayer(player2)) {
+      if (collider.isCollidingWith(player2.getCollider())) {
         println("Player 2 hit by Player " + playerId + "'s bullet!");
         shouldRemove = true;
         return;
       }
     }
     
-    // Check collision with obstacles
+    // Check collision with obstacles using colliders
     if (currentObstacles != null) {
       for (Obstacle obstacle : currentObstacles) {
         if (obstacle.isCollidingWith(x, y, size)) {
@@ -544,11 +549,6 @@ class Bullet {
         }
       }
     }
-  }
-  
-  private boolean isCollidingWithPlayer(Player player) {
-    float distance = dist(x, y, player.getX(), player.getY());
-    return distance < (size/2 + player.getSize()/2);
   }
   
   public void display() {
@@ -575,9 +575,13 @@ class Bullet {
   public boolean shouldRemove() {
     return shouldRemove;
   }
+  
+  public SphereCollider getCollider() {
+    return collider;
+  }
 }
-// player info
 
+// Player class
 class Player {
   private int id;
   private float x, y;
@@ -587,12 +591,14 @@ class Player {
   final private float size = 20; // Tank size (square)
   private int shootCooldown = 0; // Cooldown timer for shooting
   private final int maxShootCooldown = 15; // Frames between shots
+  private RectangleCollider collider; // Use rectangle collider for players
 
   Player(int id, float x, float y, float orientation) {
     this.id = id;
     this.x = x;
     this.y = y;
     this.orientation = orientation;
+    this.collider = new RectangleCollider(x, y, size, size);
   }
 
   public void display() {
@@ -664,12 +670,10 @@ class Player {
     rect(x, y, size, size);
   }
 
-  // Check collision with another player
+  // Check collision with another player using colliders
   public boolean isCollidingWith(Player other) {
     if (other == null) return false;
-
-    float distance = dist(x, y, other.x, other.y);
-    return distance < (size / 2 + other.size / 2);
+    return collider.isCollidingWith(other.getCollider());
   }
 
   public void shoot() {
@@ -699,6 +703,7 @@ class Player {
       float oldX = x, oldY = y;
       x = newX;
       y = newY;
+      collider.updatePosition(x, y);
 
       // Check for collisions
       if (!hasCollisions()) {
@@ -707,6 +712,7 @@ class Player {
         // Collision detected, revert position
         x = oldX;
         y = oldY;
+        collider.updatePosition(x, y);
       }
     }
   }
@@ -727,6 +733,7 @@ class Player {
       float oldX = x, oldY = y;
       x = newX;
       y = newY;
+      collider.updatePosition(x, y);
 
       // Check for collisions
       if (!hasCollisions()) {
@@ -735,11 +742,12 @@ class Player {
         // Collision detected, revert position
         x = oldX;
         y = oldY;
+        collider.updatePosition(x, y);
       }
     }
   }
 
-  // Check if tank has any collisions
+  // Check if tank has any collisions using colliders
   private boolean hasCollisions() {
     // Check collision with other player
     Player otherPlayer = (this == player1) ? player2 : player1;
@@ -747,7 +755,7 @@ class Player {
       return true;
     }
 
-    // Check collision with obstacles
+    // Check collision with obstacles using colliders
     if (currentObstacles != null) {
       for (int i = 0; i < currentObstacles.size(); i++) {
         Obstacle obstacle = currentObstacles.get(i);
@@ -768,11 +776,12 @@ class Player {
     orientation += rotationSpeed;
   }
 
-  // Getters for accessing position and size
+  // Getters for accessing position, size, and collider
   public float getX() { return x; }
   public float getY() { return y; }
   public float getSize() { return size; }
   public float getOrientation() { return orientation; }
+  public RectangleCollider getCollider() { return collider; }
 }
 
 // Base Collider class - handles collision detection logic
@@ -785,6 +794,7 @@ abstract class Collider {
   
   public abstract boolean isCollidingWith(float x, float y, float size);
   public abstract boolean isCollidingWith(Player player);
+  public abstract boolean isCollidingWith(Collider other);
   public abstract void updatePosition(float... params);
   
   public String getType() {
@@ -821,13 +831,30 @@ class RectangleCollider extends Collider {
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
-  
   public boolean isCollidingWith(float px, float py, float playerSize) {
     // AABB collision detection
     return (px - playerSize/2 < x + width/2 &&
             px + playerSize/2 > x - width/2 &&
             py - playerSize/2 < y + height/2 &&
             py + playerSize/2 > y - height/2);
+  }
+  
+  public boolean isCollidingWith(Collider other) {
+    if (other instanceof RectangleCollider) {
+      RectangleCollider rect = (RectangleCollider) other;
+      return (x - width/2 < rect.x + rect.width/2 &&
+              x + width/2 > rect.x - rect.width/2 &&
+              y - height/2 < rect.y + rect.height/2 &&
+              y + height/2 > rect.y - rect.height/2);
+    } else if (other instanceof SphereCollider) {
+      SphereCollider sphere = (SphereCollider) other;
+      // Rectangle-circle collision
+      float closestX = constrain(sphere.x, x - width/2, x + width/2);
+      float closestY = constrain(sphere.y, y - height/2, y + height/2);
+      float distance = dist(sphere.x, sphere.y, closestX, closestY);
+      return distance <= sphere.radius;
+    }
+    return false;
   }
   
   // Getters for position and size
@@ -868,6 +895,22 @@ class SphereCollider extends Collider {
   public boolean isCollidingWith(float px, float py, float playerSize) {
     float distance = dist(px, py, x, y);
     return distance < (playerSize/2 + radius);
+  }
+  
+  public boolean isCollidingWith(Collider other) {
+    if (other instanceof SphereCollider) {
+      SphereCollider sphere = (SphereCollider) other;
+      float distance = dist(x, y, sphere.x, sphere.y);
+      return distance < (radius + sphere.radius);
+    } else if (other instanceof RectangleCollider) {
+      RectangleCollider rect = (RectangleCollider) other;
+      // Circle-rectangle collision
+      float closestX = constrain(x, rect.x - rect.width/2, rect.x + rect.width/2);
+      float closestY = constrain(y, rect.y - rect.height/2, rect.y + rect.height/2);
+      float distance = dist(x, y, closestX, closestY);
+      return distance <= radius;
+    }
+    return false;
   }
   
   // Getters for position and radius
@@ -922,6 +965,18 @@ class TriangleCollider extends Collider {
     float minDistanceToEdge = min(dist1, min(dist2, dist3));
     
     return minDistanceToEdge <= playerRadius;
+  }
+  
+  public boolean isCollidingWith(Collider other) {
+    if (other instanceof SphereCollider) {
+      SphereCollider sphere = (SphereCollider) other;
+      return isCollidingWith(sphere.x, sphere.y, sphere.radius * 2);
+    } else if (other instanceof RectangleCollider) {
+      RectangleCollider rect = (RectangleCollider) other;
+      // Check if any corner of rectangle is inside triangle or if triangle intersects rectangle
+      return isCollidingWith(rect.x, rect.y, sqrt(rect.width*rect.width + rect.height*rect.height));
+    }
+    return false;
   }
   
   // Check if a point is inside the triangle using barycentric coordinates
