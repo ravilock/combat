@@ -172,7 +172,7 @@ void renderRectangle(JSONObject rect) {
   float x = center.getFloat("x");
   float y = center.getFloat("y");
   float h = measures.getFloat("height");
-  float w = measures.getFloat("with");
+  float w = measures.getFloat("width");
   
   rectMode(CENTER);
   rect(x, y, w, h);
@@ -523,7 +523,7 @@ class Player {
     float obstacleX = center.getFloat("x");
     float obstacleY = center.getFloat("y");
     float obstacleH = measures.getFloat("height");
-    float obstacleW = measures.getFloat("with");
+    float obstacleW = measures.getFloat("width");
     
     // Simple AABB collision detection
     return (x - size/2 < obstacleX + obstacleW/2 &&

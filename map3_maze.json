@@ -1,6 +1,6 @@
 {
   "name": "Maze Runner",
-  "description": "Complex maze-like battlefield with corridors and strategic bottlenecks",
+  "description": "Complex maze-like battlefield width corridors and strategic bottlenecks",
   "players": [
     {
       "id": 1,
@@ -30,7 +30,7 @@
       },
       "measures": {
         "height": 20,
-        "with": 140
+        "width": 140
       }
     },
     {
@@ -41,7 +41,7 @@
       },
       "measures": {
         "height": 20,
-        "with": 140
+        "width": 140
       }
     },
     {
@@ -52,7 +52,7 @@
       },
       "measures": {
         "height": 20,
-        "with": 140
+        "width": 140
       }
     },
     {
@@ -63,7 +63,7 @@
       },
       "measures": {
         "height": 20,
-        "with": 140
+        "width": 140
       }
     },
     {
@@ -74,7 +74,7 @@
       },
       "measures": {
         "height": 200,
-        "with": 20
+        "width": 20
       }
     },
     {
@@ -85,7 +85,7 @@
       },
       "measures": {
         "height": 200,
-        "with": 20
+        "width": 20
       }
     },
     {
@@ -96,7 +96,7 @@
       },
       "measures": {
         "height": 100,
-        "with": 20
+        "width": 20
       }
     },
     {
@@ -107,7 +107,7 @@
       },
       "measures": {
         "height": 100,
-        "with": 20
+        "width": 20
       }
     },
     {
@@ -118,7 +118,7 @@
       },
       "measures": {
         "height": 20,
-        "with": 80
+        "width": 80
       }
     },
     {
@@ -129,7 +129,7 @@
       },
       "measures": {
         "height": 20,
-        "with": 80
+        "width": 80
       }
     },
     {

@@ -1,6 +1,6 @@
 {
   "name": "Fortress",
-  "description": "Defensive stronghold layout with corner fortresses and central bunker",
+  "description": "Defensive stronghold layout width corner fortresses and central bunker",
   "players": [
     {
       "id": 1,
@@ -62,7 +62,7 @@
       },
       "measures": {
         "height": 80,
-        "with": 80
+        "width": 80
       }
     },
     {
