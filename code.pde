@@ -1,532 +1,763 @@
-// Combat Game - Multi-Map Obstacle Renderer
-// Loads maps from external JSON files
+// Combat Game - Multi-Map Obstacle Rendere
+// Refactored with Game class to manage all game state
 
-// Key state tracking - add these as global variables
-boolean[] keys = new boolean[256];  // For regular keys (a-z, 0-9, etc.)
-boolean[] keyCodes = new boolean[256];  // For special keys (arrow keys, etc.)
+import java.time.LocalDateTime;
 
-JSONObject[] mapData = new JSONObject[3];
-ArrayList<Obstacle> currentObstacles;
-ArrayList<Bullet> bullets;
-int currentMap = 0;
-boolean mapsLoaded = false;
+// Global game instance
+// Global game instance
+Game game;
+String gameFilesBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
 
-String[] mapFiles = {"map1_crossroads.json", "map2_fortress.json", "map3_maze.json"};
-String[] mapNames = new String[3];
-String[] mapDescriptions = new String[3];
+// Logo image
+PImage studioLogo;
+boolean showLogo = true;
+int logoDisplayFrames = 180; // Show logo for 3 seconds at 60 FPS
+float logoAlpha = 0; // For fade in/out
 
-String mapFileBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
-
-// Player instances
-Player player1, player2;
-
+// Processing setup function
 void setup() {
   size(800, 600);
-  
-  // Load all maps from files
-  // Load all maps from files
-  loadAllMaps();
-  
-  // Initialize bullets list
-  bullets = new ArrayList<Bullet>();
-  
-  // Start with first map if loading was successful
-  if (mapsLoaded) {
-    loadMap(currentMap);
-    println("Combat Arena Ready!");
-    println("Current Map: " + mapNames[currentMap]);
-    println("Use number keys 1-3 to switch maps");
-    println("Player 1: WASD to move, SPACE to shoot");
-    println("Player 2: Arrow keys to move, ENTER to shoot");
-  } else {
-    println("ERROR: Could not load map files!");
-    println("Make sure the following files are in your data folder:");
-    for (String filename : mapFiles) {
-      println("  - " + filename);
-    }
-  }
+  studioLogo = loadImage(gameFilesBasePath + "campos-de-batalha-logo.png");
+  game = new Game();
+  game.initialize();
 }
 
+// Processing draw function
 void draw() {
-  background(20, 20, 20);
-  
-  if (!mapsLoaded) {
-    drawErrorScreen();
-    return;
-  }
-  
-  // Draw arena border
-  stroke(255, 255, 0);
-  strokeWeight(4);
-  noFill();
-  rect(20, 20, width-40, height-40);
-  
-  // Render current map obstacles
-  // Render current map obstacles
-  renderObstacles();
-  
-  // Update and render bullets
-  updateBullets();
-  renderBullets();
-  
-  // Render player spawn points
-  renderPlayers();
-  
-  // Display UI
-  drawUI();
+  if (showLogo && studioLogo != null && logoDisplayFrames > 0) {
+    background(20, 20, 20);
+    imageMode(CENTER);
 
-  // Handle movement keys
-  handleMovementKeys();
-}
-
-void loadAllMaps() {
-  println("Loading maps from files...");
-  
-  for (int i = 0; i < mapFiles.length; i++) {
-    try {
-      println("Loading " + mapFiles[i] + "...");
-      mapData[i] = loadJSONObject(mapFileBasePath + mapFiles[i]);
-      
-      if (mapData[i] != null) {
-        // Extract map name and description
-        mapNames[i] = mapData[i].getString("name");
-        mapDescriptions[i] = mapData[i].getString("description");
-        println("  ✓ Loaded: " + mapNames[i]);
-      } else {
-        println("  ✗ Failed to load " + mapFiles[i]);
-        return;
-      }
-    } catch (Exception e) {
-      println("  ✗ Error loading " + mapFiles[i] + ": " + e.getMessage());
-      return;
-    }
-  }
-  
-  mapsLoaded = true;
-  println("All maps loaded successfully!");
-}
-
-void loadMap(int mapIndex) {
-  if (!mapsLoaded || mapIndex < 0 || mapIndex >= mapData.length) {
-    return;
-  }
-
-  try {
-    // Load obstacles from JSON and convert to Obstacle objects
-    JSONArray obstaclesArray = mapData[mapIndex].getJSONArray("obstacles");
-    currentObstacles = new ArrayList<Obstacle>();
-    for (int i = 0; i < obstaclesArray.size(); i++) {
-      JSONObject obj = obstaclesArray.getJSONObject(i);
-      String kind = obj.getString("kind").toLowerCase();
-      if (kind.equals("rectangle")) {
-        JSONObject center = obj.getJSONObject("center");
-        JSONObject measures = obj.getJSONObject("measures");
-        currentObstacles.add(new RectangleObstacle(
-          center.getFloat("x"),
-          center.getFloat("y"),
-          measures.getFloat("width"),
-          measures.getFloat("height")
-        ));
-      } else if (kind.equals("sphere")) {
-        JSONObject center = obj.getJSONObject("center");
-        currentObstacles.add(new SphereObstacle(
-          center.getFloat("x"),
-          center.getFloat("y"),
-          obj.getFloat("radius")
-        ));
-      } else if (kind.equals("triangle")) {
-        JSONArray vertices = obj.getJSONArray("vertices");
-        if (vertices.size() >= 3) {
-          JSONObject v1 = vertices.getJSONObject(0);
-          JSONObject v2 = vertices.getJSONObject(1);
-          JSONObject v3 = vertices.getJSONObject(2);
-          currentObstacles.add(new TriangleObstacle(
-            v1.getFloat("x"), v1.getFloat("y"),
-            v2.getFloat("x"), v2.getFloat("y"),
-            v3.getFloat("x"), v3.getFloat("y")
-          ));
-        }
-      }
-    }
-    JSONArray currentPlayers = mapData[mapIndex].getJSONArray("players");
-
-    // Validate players array
-    if (currentPlayers.size() != 2) {
-      println("WARNING: Map " + mapNames[mapIndex] + " should have exactly 2 players, found " + currentPlayers.size());
-    }
-
-    // Create Player instances from JSON data
-    createPlayersFromJSON(currentPlayers);
-
-    println("Loaded map: " + mapNames[mapIndex] + " (" + currentObstacles.size() + " obstacles, " + currentPlayers.size() + " players)");
-  } catch (Exception e) {
-    println("Error loading map " + mapIndex + ": " + e.getMessage());
-  }
-}
-
-void renderObstacles() {
-  if (currentObstacles == null) return;
-  
-  // Set obstacle appearance based on current map
-  setObstacleStyle(currentMap);
-  
-  // Get the style colors for the obstacles
-  color currentFill = g.fillColor;
-  color currentStroke = g.strokeColor;
-  
-  // Loop through each obstacle and render using their display method
-  for (Obstacle obstacle : currentObstacles) {
-    obstacle.setStyle(currentFill, currentStroke);
-    obstacle.display();
-  }
-}
-
-void setObstacleStyle(int mapIndex) {
-  strokeWeight(2);
-  
-  switch(mapIndex) {
-    case 0: // Cross Roads - Green
-      fill(100, 150, 100);
-      stroke(150, 200, 150);
-      break;
-    case 1: // Fortress - Blue
-      fill(100, 100, 150);
-      stroke(150, 150, 200);
-      break;
-    case 2: // Maze Runner - Red
-      fill(150, 100, 100);
-      stroke(200, 150, 150);
-      break;
-  }
-}
-
-void renderRectangle(JSONObject rect) {
-  JSONObject center = rect.getJSONObject("center");
-  JSONObject measures = rect.getJSONObject("measures");
-  
-  float x = center.getFloat("x");
-  float y = center.getFloat("y");
-  float h = measures.getFloat("height");
-  float w = measures.getFloat("width");
-  
-  rectMode(CENTER);
-  rect(x, y, w, h);
-}
-
-void renderSphere(JSONObject sphere) {
-  JSONObject center = sphere.getJSONObject("center");
-  float radius = sphere.getFloat("radius");
-  
-  float x = center.getFloat("x");
-  float y = center.getFloat("y");
-  
-  ellipse(x, y, radius * 2, radius * 2);
-}
-
-void createPlayersFromJSON(JSONArray players) {
-  if (players == null || players.size() < 2) {
-    println("Error: Not enough player data in JSON");
-    return;
-  }
-
-  // Create Player 1
-  JSONObject p1Data = players.getJSONObject(0);
-  JSONObject p1Pos = p1Data.getJSONObject("position");
-  player1 = new Player(
-    p1Data.getInt("id"),
-    p1Pos.getFloat("x"),
-    p1Pos.getFloat("y"),
-    p1Data.getFloat("orientation")
-  );
-
-  // Create Player 2
-  JSONObject p2Data = players.getJSONObject(1);
-  JSONObject p2Pos = p2Data.getJSONObject("position");
-  player2 = new Player(
-    p2Data.getInt("id"),
-    p2Pos.getFloat("x"),
-    p2Pos.getFloat("y"),
-    p2Data.getFloat("orientation")
-  );
-}
-
-void renderPlayers() {
-  if (player1 != null) {
-    player1.display();
-  }
-  if (player2 != null) {
-    player2.display();
-  }
-}
-
-void renderTriangle(JSONObject triangle) {
-  JSONArray vertices = triangle.getJSONArray("vertices");
-  
-  if (vertices.size() >= 3) {
-    JSONObject v1 = vertices.getJSONObject(0);
-    JSONObject v2 = vertices.getJSONObject(1);
-    JSONObject v3 = vertices.getJSONObject(2);
-    
-    float x1 = v1.getFloat("x");
-    float y1 = v1.getFloat("y");
-    float x2 = v2.getFloat("x");
-    float y2 = v2.getFloat("y");
-    float x3 = v3.getFloat("x");
-    float y3 = v3.getFloat("y");
-    
-    triangle(x1, y1, x2, y2, x3, y3);
-  }
-}
-
-void drawUI() {
-  // Map selection UI
-  fill(255, 255, 0);
-  textAlign(LEFT);
-  textSize(16);
-  text("COMBAT ARENA", 30, 50);
-  
-  textSize(12);
-  text("Current Map: " + mapNames[currentMap], 30, 70);
-  text("Press 1-3 to switch maps", 30, 85);
-  
-  // Map list
-  textAlign(RIGHT);
-  for (int i = 0; i < mapNames.length; i++) {
-    if (i == currentMap) {
-      fill(255, 255, 0); // Highlight current map
-      text("> " + (i+1) + ". " + mapNames[i], width-30, 50 + i*15);
+    // Fade in for first 1s, hold, fade out for last 1s
+    int fadeFrames = 60;
+    if (logoDisplayFrames > 180 - fadeFrames) {
+      logoAlpha = map(logoDisplayFrames, 180, 180 - fadeFrames, 0, 255);
+    } else if (logoDisplayFrames < fadeFrames) {
+      logoAlpha = map(logoDisplayFrames, fadeFrames, 0, 255, 0);
     } else {
-      fill(150, 150, 150);
-      text((i+1) + ". " + mapNames[i], width-30, 50 + i*15);
+      logoAlpha = 255;
     }
+    tint(255, logoAlpha);
+    image(studioLogo, width/2, height/2, 512, 512);
+    noTint();
+
+    logoDisplayFrames--;
+    if (logoDisplayFrames == 0) {
+      showLogo = false;
+    }
+    return;
   }
-  
-  // Map description
-  fill(200, 200, 200);
-  textAlign(CENTER);
-  textSize(10);
-  text(mapDescriptions[currentMap], width/2, height-45);
-  text("Choose your battlefield! Each map offers different tactical challenges.", width/2, height-30);
+  game.update();
+  game.render();
 }
 
-void drawErrorScreen() {
-  fill(255, 100, 100);
-  textAlign(CENTER);
-  textSize(20);
-  text("MAP LOADING ERROR", width/2, height/2 - 60);
-  
-  textSize(14);
-  fill(255, 255, 255);
-  text("Could not load map files from data folder.", width/2, height/2 - 20);
-  text("Make sure these files exist in your sketch's data folder:", width/2, height/2);
-  
-  textSize(12);
-  fill(200, 200, 200);
-  for (int i = 0; i < mapFiles.length; i++) {
-    text("• " + mapFileBasePath + mapFiles[i], width/2, height/2 + 30 + i*15);
-  }
-  
-  textSize(10);
-  fill(150, 150, 150);
-  text("Press 'R' to retry loading maps", width/2, height/2 + 100);
-}
-
+// Processing key event handlers
 void keyPressed() {
-  // Handle regular keys
-  if (key >= 0 && key < 256) {
-    keys[key] = true;
-  }
-
-  // Handle special keys (arrow keys, etc.)
-  if (keyCode >= 0 && keyCode < 256) {
-    keyCodes[keyCode] = true;
-  }
-
-  // Non-movement keys that should only trigger once
-  handleSinglePressKeys();
+  game.handleKeyPressed();
 }
 
 void keyReleased() {
-  // Handle regular keys
-  if (key >= 0 && key < 256) {
-    keys[key] = false;
-  }
-
-  // Handle special keys
-  if (keyCode >= 0 && keyCode < 256) {
-    keyCodes[keyCode] = false;
-  }
+  game.handleKeyReleased();
 }
 
+// Interfaces for game functionality
+interface BulletCreator {
+  void createBullet(float x, float y, float angle, int playerId);
+}
 
-// Handle keys that should only trigger once per press
-void handleSinglePressKeys() {
-  if (!mapsLoaded) {
+interface ObstacleProvider {
+  ArrayList<Obstacle> getCurrentObstacles();
+}
+
+interface PlayerProvider {
+  Player getPlayerByID(int id);
+}
+
+interface ScoreIncreaser {
+  void increaseScore(int playerId);
+}
+
+interface PlayerHitListener {
+  void onPlayerHit(int playerId);
+}
+
+// Main Game class - contains all game state and logic
+class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncreaser, PlayerHitListener {
+  // Key state tracking
+  private boolean[] keys = new boolean[256];
+  private boolean[] keyCodes = new boolean[256];
+
+  // Map and game state
+  private JSONObject[] mapData = new JSONObject[3];
+  private ArrayList<Obstacle> currentObstacles;
+  private ArrayList<Bullet> bullets;
+  private int currentMap = 0;
+  private boolean mapsLoaded = false;
+
+  private int[] scores = {0, 0}; // Player scores
+
+  private String[] mapFiles = {"map1_crossroads.json", "map2_fortress.json", "map3_maze.json"};
+  private String[] mapNames = new String[3];
+  private String[] mapDescriptions = new String[3];
+
+  // Player instances
+  private Player player1, player2;
+
+  public Game() {
+    // Constructor - initialize collections
+    bullets = new ArrayList<Bullet>();
+  }
+
+  public void initialize() {
+    // Load all maps from files
+    loadAllMaps();
+    
+    // Start with first map if loading was successful
+    if (mapsLoaded) {
+      loadMap(currentMap);
+      println("Combat Arena Ready!");
+      println("Current Map: " + mapNames[currentMap]);
+      println("Use number keys 1-3 to switch maps");
+      println("Player 1: WASD to move, SPACE to shoot");
+      println("Player 2: Arrow keys to move, ENTER to shoot");
+    } else {
+      println("ERROR: Could not load map files!");
+      println("Make sure the following files are in your data folder:");
+      for (String filename : mapFiles) {
+        println("  - " + filename);
+      }
+    }
+  }
+
+  public void update() {
+    if (!mapsLoaded) return;
+    
+    // Update bullets
+    updateBullets();
+    
+    // Handle movement keys
+    handleMovementKeys();
+
+    // Handle player hit animation
+    handlePlayerHitAnimation();
+  }
+
+  public void render() {
+    background(20, 20, 20);
+    
+    if (!mapsLoaded) {
+      drawErrorScreen();
+      return;
+    }
+
+    // Render current map obstacles
+    renderObstacles();
+    
+    // Render bullets
+    renderBullets();
+    
+    // Render players
+    renderPlayers();
+    
+    // Display UI
+    drawUI();
+  }
+
+  private void loadAllMaps() {
+    println("Loading maps from files...");
+    
+    for (int i = 0; i < mapFiles.length; i++) {
+      try {
+        println("Loading " + mapFiles[i] + "...");
+        mapData[i] = loadJSONObject(gameFilesBasePath + mapFiles[i]);
+        
+        if (mapData[i] != null) {
+          // Extract map name and description
+          mapNames[i] = mapData[i].getString("name");
+          mapDescriptions[i] = mapData[i].getString("description");
+          println("  ✓ Loaded: " + mapNames[i]);
+        } else {
+          println("  ✗ Failed to load " + mapFiles[i]);
+          return;
+        }
+      } catch (Exception e) {
+        println("  ✗ Error loading " + mapFiles[i] + ": " + e.getMessage());
+        return;
+      }
+    }
+    
+    mapsLoaded = true;
+    println("All maps loaded successfully!");
+  }
+
+  private void loadMap(int mapIndex) {
+    if (!mapsLoaded || mapIndex < 0 || mapIndex >= mapData.length) {
+      return;
+    }
+
+    try {
+      // Load obstacles from JSON and convert to Obstacle objects
+      JSONArray obstaclesArray = mapData[mapIndex].getJSONArray("obstacles");
+      currentObstacles = new ArrayList<Obstacle>();
+      for (int i = 0; i < obstaclesArray.size(); i++) {
+        JSONObject obj = obstaclesArray.getJSONObject(i);
+        String kind = obj.getString("kind").toLowerCase();
+        if (kind.equals("rectangle")) {
+          JSONObject center = obj.getJSONObject("center");
+          JSONObject measures = obj.getJSONObject("measures");
+          currentObstacles.add(new RectangleObstacle(
+            center.getFloat("x"),
+            center.getFloat("y"),
+            measures.getFloat("width"),
+            measures.getFloat("height")
+          ));
+        } else if (kind.equals("sphere")) {
+          JSONObject center = obj.getJSONObject("center");
+          currentObstacles.add(new SphereObstacle(
+            center.getFloat("x"),
+            center.getFloat("y"),
+            obj.getFloat("radius")
+          ));
+        } else if (kind.equals("triangle")) {
+          JSONArray vertices = obj.getJSONArray("vertices");
+          if (vertices.size() >= 3) {
+            JSONObject v1 = vertices.getJSONObject(0);
+            JSONObject v2 = vertices.getJSONObject(1);
+            JSONObject v3 = vertices.getJSONObject(2);
+            currentObstacles.add(new TriangleObstacle(
+              v1.getFloat("x"), v1.getFloat("y"),
+              v2.getFloat("x"), v2.getFloat("y"),
+              v3.getFloat("x"), v3.getFloat("y")
+            ));
+          }
+        }
+      }
+      JSONArray currentPlayers = mapData[mapIndex].getJSONArray("players");
+
+      // Validate players array
+      if (currentPlayers.size() != 2) {
+        println("WARNING: Map " + mapNames[mapIndex] + " should have exactly 2 players, found " + currentPlayers.size());
+      }
+
+      // Create Player instances from JSON data
+      createPlayersFromJSON(currentPlayers);
+
+      println("Loaded map: " + mapNames[mapIndex] + " (" + currentObstacles.size() + " obstacles, " + currentPlayers.size() + " players)");
+    } catch (Exception e) {
+      println("Error loading map " + mapIndex + ": " + e.getMessage());
+    }
+  }
+
+  private void renderObstacles() {
+    if (currentObstacles == null) return;
+    
+    // Set obstacle appearance based on current map
+    setObstacleStyle(currentMap);
+    
+    // Get the style colors for the obstacles
+    color currentFill = g.fillColor;
+    color currentStroke = g.strokeColor;
+    
+    // Loop through each obstacle and render using their display method
+    for (Obstacle obstacle : currentObstacles) {
+      obstacle.setStyle(currentFill, currentStroke);
+      obstacle.display();
+    }
+  }
+
+  private void setObstacleStyle(int mapIndex) {
+    strokeWeight(2);
+    
+    switch(mapIndex) {
+      case 0: // Cross Roads - Green
+        fill(100, 150, 100);
+        stroke(150, 200, 150);
+        break;
+      case 1: // Fortress - Blue
+        fill(100, 100, 150);
+        stroke(150, 150, 200);
+        break;
+      case 2: // Maze Runner - Red
+        fill(150, 100, 100);
+        stroke(200, 150, 150);
+        break;
+    }
+  }
+
+  private void createPlayersFromJSON(JSONArray players) {
+    if (players == null || players.size() < 2) {
+      println("Error: Not enough player data in JSON");
+      return;
+    }
+
+    // Create Player 1
+    JSONObject p1Data = players.getJSONObject(0);
+    JSONObject p1Pos = p1Data.getJSONObject("position");
+    player1 = new Player(
+      this,
+      this,
+      this,
+      p1Data.getInt("id"),
+      p1Pos.getFloat("x"),
+      p1Pos.getFloat("y"),
+      p1Data.getFloat("orientation")
+    );
+
+    // Create Player 2
+    JSONObject p2Data = players.getJSONObject(1);
+    JSONObject p2Pos = p2Data.getJSONObject("position");
+    player2 = new Player(
+      this,
+      this,
+      this,
+      p2Data.getInt("id"),
+      p2Pos.getFloat("x"),
+      p2Pos.getFloat("y"),
+      p2Data.getFloat("orientation")
+    );
+  }
+
+  private void renderPlayers() {
+    if (player1 != null) {
+      player1.display();
+    }
+    if (player2 != null) {
+      player2.display();
+    }
+  }
+
+  private void drawUI() {
+    // Map selection UI
+    fill(255, 255, 0);
+    textAlign(LEFT);
+    textSize(16);
+    text("COMBAT ARENA", 30, 50);
+    textSize(12);
+    text("Current Map: " + mapNames[currentMap], 30, 70);
+    text("Press 1-3 to switch maps", 30, 85);
+
+    // Scores
+    fill(255);
+    textAlign(CENTER);
+    textSize(18);
+    text("Scores", width/2, 30);
+    textSize(14);
+    text("Player 1: " + scores[0], width/2 - 50, 50);
+    text("Player 2: " + scores[1], width/2 + 50, 50);
+
+    // Map list
+    textAlign(RIGHT);
+    for (int i = 0; i < mapNames.length; i++) {
+      if (i == currentMap) {
+        fill(255, 255, 0); // Highlight current map
+        text("> " + (i+1) + ". " + mapNames[i], width-30, 50 + i*15);
+      } else {
+        fill(150, 150, 150);
+        text((i+1) + ". " + mapNames[i], width-30, 50 + i*15);
+      }
+    }
+  }
+
+  private void drawErrorScreen() {
+    fill(255, 100, 100);
+    textAlign(CENTER);
+    textSize(20);
+    text("MAP LOADING ERROR", width/2, height/2 - 60);
+    
+    textSize(14);
+    fill(255, 255, 255);
+    text("Could not load map files from data folder.", width/2, height/2 - 20);
+    text("Make sure these files exist in your sketch's data folder:", width/2, height/2);
+    
+    textSize(12);
+    fill(200, 200, 200);
+    for (int i = 0; i < mapFiles.length; i++) {
+      text("• " + gameFilesBasePath + mapFiles[i], width/2, height/2 + 30 + i*15);
+    }
+    
+    textSize(10);
+    fill(150, 150, 150);
+    text("Press 'R' to retry loading maps", width/2, height/2 + 100);
+  }
+
+  public void handleKeyPressed() {
+    // Handle regular keys
+    if (key >= 0 && key < 256) {
+      keys[key] = true;
+    }
+
+    // Handle special keys (arrow keys, etc.)
+    if (keyCode >= 0 && keyCode < 256) {
+      keyCodes[keyCode] = true;
+    }
+
+    // Non-movement keys that should only trigger once
+    handleSinglePressKeys();
+  }
+
+  public void handleKeyReleased() {
+    // Handle regular keys
+    if (key >= 0 && key < 256) {
+      keys[key] = false;
+    }
+
+    // Handle special keys
+    if (keyCode >= 0 && keyCode < 256) {
+      keyCodes[keyCode] = false;
+    }
+  }
+
+  // Handle keys that should only trigger once per press
+  private void handleSinglePressKeys() {
+    if (!mapsLoaded) {
+      if (key == 'r' || key == 'R') {
+        loadAllMaps();
+        if (mapsLoaded) {
+          loadMap(currentMap);
+        }
+      }
+      return;
+    }
+
+    // Map selection (only trigger once per press)
+    if (key >= '1' && key <= '3') {
+      int newMap = key - '1';
+      if (newMap != currentMap) {
+        currentMap = newMap;
+        loadMap(currentMap);
+      }
+    }
+
+    // Shooting controls
+    if (key == ' ') { // Spacebar for Player 1
+      if (player1 != null) {
+        if (!player1.isOnHitCooldown()) { // Prevent shooting if on hit cooldown
+          player1.shoot();
+        }
+      }
+    }
+    
+    if (keyCode == ENTER) { // Enter key for Player 2
+      if (player2 != null) {
+        if (!player2.isOnHitCooldown()) { // Prevent shooting if on hit cooldown
+          player2.shoot();
+        }
+      }
+    }
+
+    // Debug and utility functions (only trigger once per press)
     if (key == 'r' || key == 'R') {
+      println("Reloading all maps...");
       loadAllMaps();
       if (mapsLoaded) {
         loadMap(currentMap);
       }
     }
-    return;
-  }
 
-  // Map selection (only trigger once per press)
-  if (key >= '1' && key <= '3') {
-    int newMap = key - '1';
-    if (newMap != currentMap) {
-      currentMap = newMap;
-      loadMap(currentMap);
+    if (key == 'i' || key == 'I') {
+      if (mapsLoaded && currentObstacles != null) {
+        println("\n--- Map Debug Info ---");
+        println("Current Map: " + mapNames[currentMap]);
+        println("Description: " + mapDescriptions[currentMap]);
+        println("File: " + mapFiles[currentMap]);
+        println("Obstacles: " + currentObstacles.size());
+        for (int i = 0; i < currentObstacles.size(); i++) {
+          Obstacle obstacle = currentObstacles.get(i);
+          println("  " + i + ": " + obstacle.getKind());
+        }
+        if (player1 != null && player2 != null) {
+          println("  Player 1: (" + player1.getX() + ", " + player1.getY() + ") facing " + player1.getOrientation() + "°");
+          println("  Player 2: (" + player2.getX() + ", " + player2.getY() + ") facing " + player2.getOrientation() + "°");
+        }
+        println("Active bullets: " + bullets.size());
+      }
     }
   }
 
-  // Shooting controls
-  if (key == ' ') { // Spacebar for Player 1
+  // Call this in your main update loop to handle continuous movement
+  private void handleMovementKeys() {
+    if (!mapsLoaded) return;
+
+    // Player 1 controls (WASD) - using lowercase for consistency
     if (player1 != null) {
-      player1.shoot();
+      if (player1.isOnHitCooldown()) {
+        // If player is on hit cooldown, prevent movement
+        return;
+      }
+      if (keys['w'] || keys['W']) {
+        player1.moveForward();
+      }
+      if (keys['s'] || keys['S']) {
+        player1.moveBackward();
+      }
+      if (keys['a'] || keys['A']) {
+        player1.rotateLeft();
+      }
+      if (keys['d'] || keys['D']) {
+        player1.rotateRight();
+      }
     }
-  }
-  
-  if (keyCode == ENTER) { // Enter key for Player 2
+
+    // Player 2 controls (Arrow keys)
     if (player2 != null) {
-      player2.shoot();
-    }
-  }
-
-  // Debug and utility functions (only trigger once per press)
-  if (key == 'r' || key == 'R') {
-    println("Reloading all maps...");
-    loadAllMaps();
-    if (mapsLoaded) {
-      loadMap(currentMap);
-    }
-  }
-
-  if (key == 'i' || key == 'I') {
-    if (mapsLoaded && currentObstacles != null) {
-      println("\n--- Map Debug Info ---");
-      println("Current Map: " + mapNames[currentMap]);
-      println("Description: " + mapDescriptions[currentMap]);
-      println("File: " + mapFiles[currentMap]);
-      println("Obstacles: " + currentObstacles.size());
-      for (int i = 0; i < currentObstacles.size(); i++) {
-        Obstacle obstacle = currentObstacles.get(i);
-        println("  " + i + ": " + obstacle.getKind());
+      if (player2.isOnHitCooldown()) {
+        // If player is on hit cooldown, prevent movement
+        return;
       }
-      if (player1 != null && player2 != null) {
-        println("  Player 1: (" + player1.x + ", " + player1.y + ") facing " + player1.orientation + "°");
-        println("  Player 2: (" + player2.x + ", " + player2.y + ") facing " + player2.orientation + "°");
+      if (keyCodes[UP]) {
+        player2.moveForward();
       }
-      println("Active bullets: " + bullets.size());
-    }
-  }
-}
-
-// Call this in your main draw() loop to handle continuous movement
-void handleMovementKeys() {
-  if (!mapsLoaded) return;
-
-  // Player 1 controls (WASD) - using lowercase for consistency
-  if (player1 != null) {
-    if (keys['w'] || keys['W']) {
-      player1.moveForward();
-    }
-    if (keys['s'] || keys['S']) {
-      player1.moveBackward();
-    }
-    if (keys['a'] || keys['A']) {
-      player1.rotateLeft();
-    }
-    if (keys['d'] || keys['D']) {
-      player1.rotateRight();
+      if (keyCodes[DOWN]) {
+        player2.moveBackward();
+      }
+      if (keyCodes[LEFT]) {
+        player2.rotateLeft();
+      }
+      if (keyCodes[RIGHT]) {
+        player2.rotateRight();
+      }
     }
   }
 
-  // Player 2 controls (Arrow keys)
-  if (player2 != null) {
-    if (keyCodes[UP]) {
-      player2.moveForward();
+  private void handlePlayerHitAnimation() {
+    if (!mapsLoaded) return;
+    if (player1 != null) {
+      if (player1.isOnHitCooldown()) {
+        player1.rotateWithSpeed(12); // Optional: Rotate player 1 slightly to indicate hit
+      }
     }
-    if (keyCodes[DOWN]) {
-      player2.moveBackward();
+
+    if (player2 != null) {
+      if (player2.isOnHitCooldown()) {
+        player2.rotateWithSpeed(12); // Optional: Rotate player 2 slightly to indicate hit
+      }
     }
-    if (keyCodes[LEFT]) {
-      player2.rotateLeft();
+  }
+
+  // Helper functions to check key states
+  public boolean isKeyPressed(char k) {
+    return keys[k];
+  }
+
+  public boolean isKeyCodePressed(int code) {
+    return keyCodes[code];
+  }
+
+  // Bullet management functions
+  private void updateBullets() {
+    for (int i = bullets.size() - 1; i >= 0; i--) {
+      Bullet bullet = bullets.get(i);
+      bullet.update();
+
+      // Remove bullet if it's out of bounds or hit something
+      if (bullet.shouldRemove()) {
+        bullets.remove(i);
+      }
     }
-    if (keyCodes[RIGHT]) {
-      player2.rotateRight();
+  }
+
+  private void renderBullets() {
+    for (Bullet bullet : bullets) {
+      bullet.display();
     }
+  }
+
+  public void createBullet(float x, float y, float angle, int playerId) {
+    bullets.add(new Bullet(this, this, this, this, x, y, angle, playerId));
+  }
+
+  // Getters for game state (used by Player and Bullet classes)
+  public ArrayList<Obstacle> getCurrentObstacles() {
+    return currentObstacles;
+  }
+
+  public Player getPlayerByID(int id) {
+    if (id == 1) {
+      return player1;
+    } else if (id == 2) {
+      return player2;
+    }
+    return null;
+  }
+
+  public void increaseScore(int playerId) {
+    if (playerId == 1) {
+      scores[0]++;
+    } else if (playerId == 2) {
+      scores[1]++;
+    }
+    println("Player " + playerId + " scored! New score: " + scores[playerId - 1]);
+  }
+
+  public void onPlayerHit(int playerId) {
+    // Handle player hit logic here if needed
+    println("Player " + playerId + " was hit!");
+    Player player = getPlayerByID(playerId);
+    Player otherPlayer = (playerId == 1) ? player2 : player1;
+    if (player != null) {
+      player.wasHit(); // Set hit state
+      // Move both players to random valid locations
+      placePlayerRandomly(otherPlayer);
+      // Additional logic for hit can be added here
+    }
+  }
+
+  // Place a player at a random valid location (not colliding with obstacles or other player)
+  private void placePlayerRandomly(Player player) {
+    int maxTries = 100;
+    float margin = 40;
+    float size = player.getSize();
+    for (int i = 0; i < maxTries; i++) {
+      float x = random(margin + size/2, width - margin - size/2);
+      float y = random(margin + size/2, height - margin - size/2);
+      float orientation = random(0, 360);
+      player.setPositionAndOrientation(x, y, orientation);
+      // Check for collisions
+      boolean collides = false;
+      // Check obstacles
+      ArrayList<Obstacle> obs = getCurrentObstacles();
+      if (obs != null) {
+        for (Obstacle o : obs) {
+          if (o.isCollidingWith(player)) {
+            collides = true;
+            break;
+          }
+        }
+      }
+      // Check other player
+      Player other = (player == player1) ? player2 : player1;
+      if (other != null && player.isCollidingWith(other)) {
+        collides = true;
+      }
+      if (!collides) {
+        return;
+      }
+    }
+    // If no valid position found after maxTries, do nothing
   }
 }
 
-// Alternative: Helper functions to check key states
-boolean isKeyPressed(char k) {
-  return keys[k];
-}
-
-boolean isKeyCodePressed(int code) {
-  return keyCodes[code];
-}
-
-// Bullet management functions
-void updateBullets() {
-  for (int i = bullets.size() - 1; i >= 0; i--) {
-    Bullet bullet = bullets.get(i);
-    bullet.update();
-    
-    // Remove bullet if it's out of bounds or hit something
-    if (bullet.shouldRemove()) {
-      bullets.remove(i);
-    }
-  }
-}
-
-void renderBullets() {
-  for (Bullet bullet : bullets) {
-    bullet.display();
-  }
-}
-
-void createBullet(float x, float y, float angle, int playerId) {
-  bullets.add(new Bullet(x, y, angle, playerId));
-}
-
-// Bullet class
+// Bullet class - now takes Game reference
 class Bullet {
+  private ObstacleProvider obstacleProvider;
+  private PlayerProvider playerProvider;
+  private ScoreIncreaser scoreIncreaser;
+  private PlayerHitListener playerHitListener;
   private float x, y;
   private float angle;
   private float speed = 4.0; // Slightly faster than player speed
+  private LocalDateTime bulletCreationTime;
+  private final int maxBulletLifetime = 5; // Maximum lifetime in seconds
   private int playerId;
   private boolean shouldRemove = false;
   private float size = 6; // Small square bullet
   private SphereCollider collider; // Use sphere collider for bullets
-  
-  public Bullet(float startX, float startY, float angle, int playerId) {
+  private int bounces = 0; // Track number of bounces
+  private final int maxBounces = 4; // Maximum number of bounces allowed
+
+  public Bullet(ObstacleProvider obstacleProvider, PlayerProvider playerProvider, ScoreIncreaser scoreIncreaser, PlayerHitListener playerHitListener, float startX, float startY, float angle, int playerId) {
+    this.obstacleProvider = obstacleProvider;
+    this.playerProvider = playerProvider;
+    this.scoreIncreaser = scoreIncreaser;
+    this.playerHitListener = playerHitListener;
     this.x = startX;
     this.y = startY;
     this.angle = angle;
     this.playerId = playerId;
     this.collider = new SphereCollider(x, y, size/2); // Radius is half the size
+    this.bulletCreationTime = LocalDateTime.now();
   }
-  
+
   public void update() {
-    // Move bullet
-    x += cos(radians(angle)) * speed;
-    y += sin(radians(angle)) * speed;
-    
-    // Update collider position
-    collider.updatePosition(x, y);
-    
-    // Check bounds
-    if (x < 20 || x > width - 20 || y < 20 || y > height - 20) {
+    LocalDateTime now = LocalDateTime.now();
+    if (bulletCreationTime != null) {
+      // Check if bullet has exceeded its lifetime
+      long secondsSinceCreation = java.time.Duration.between(bulletCreationTime, now).getSeconds();
+      if (secondsSinceCreation > maxBulletLifetime) {
       shouldRemove = true;
       return;
+      }
+    }
+    // Calculate next position
+    float nextX = x + cos(radians(angle)) * speed;
+    float nextY = y + sin(radians(angle)) * speed;
+    
+    // Check bounds and handle bouncing
+    boolean bounced = false;
+    
+    // Check horizontal bounds (left/right walls)
+    if (nextX < 20 || nextX > width - 20) {
+      if (bounces < maxBounces) {
+        angle = 180 - angle; // Reflect horizontally
+        bounces++;
+        bounced = true;
+        // Ensure bullet stays within bounds
+        nextX = constrain(nextX, 20, width - 20);
+      } else {
+        shouldRemove = true;
+        return;
+      }
     }
     
+    // Check vertical bounds (top/bottom walls)
+    if (nextY < 20 || nextY > height - 20) {
+      if (bounces < maxBounces) {
+        angle = -angle; // Reflect vertically
+        bounces++;
+        bounced = true;
+        // Ensure bullet stays within bounds
+        nextY = constrain(nextY, 20, height - 20);
+      } else {
+        shouldRemove = true;
+        return;
+      }
+    }
+    
+    // If we bounced off walls, update position and collider, then continue
+    if (bounced) {
+      x = nextX;
+      y = nextY;
+      collider.updatePosition(x, y);
+      return; // Skip obstacle collision check this frame to avoid getting stuck
+    }
+    
+    // Check collision with obstacles and handle bouncing
+    ArrayList<Obstacle> currentObstacles = obstacleProvider.getCurrentObstacles();
+    if (currentObstacles != null) {
+      for (Obstacle obstacle : currentObstacles) {
+        if (obstacle.isCollidingWith(nextX, nextY, size)) {
+          if (bounces < maxBounces) {
+            // Calculate bounce angle based on obstacle type
+            float bounceAngle = calculateBounceAngle(obstacle, nextX, nextY);
+            angle = bounceAngle;
+            bounces++;
+            
+            // Move bullet slightly away from obstacle to prevent getting stuck
+            x += cos(radians(angle)) * 2;
+            y += sin(radians(angle)) * 2;
+            collider.updatePosition(x, y);
+            return; // Skip movement this frame
+          } else {
+            shouldRemove = true;
+            return;
+          }
+        }
+      }
+    }
+    
+    // Move bullet normally if no collision
+    x = nextX;
+    y = nextY;
+    collider.updatePosition(x, y);
+    
     // Check collision with players using colliders
+    Player player1 = playerProvider.getPlayerByID(1);
+    Player player2 = playerProvider.getPlayerByID(2);
+    
     if (player1 != null && playerId != 1) {
       if (collider.isCollidingWith(player1.getCollider())) {
-        println("Player 1 hit by Player " + playerId + "'s bullet!");
+        scoreIncreaser.increaseScore(2); // Player 2 scores
+        playerHitListener.onPlayerHit(1); // Notify player hit
         shouldRemove = true;
         return;
       }
@@ -534,30 +765,155 @@ class Bullet {
     
     if (player2 != null && playerId != 2) {
       if (collider.isCollidingWith(player2.getCollider())) {
-        println("Player 2 hit by Player " + playerId + "'s bullet!");
+        scoreIncreaser.increaseScore(1); // Player 1 scores
+        playerHitListener.onPlayerHit(2); // Notify player hit
         shouldRemove = true;
         return;
       }
     }
+  }
+  
+  // Calculate bounce angle based on obstacle type and collision point
+  private float calculateBounceAngle(Obstacle obstacle, float bulletX, float bulletY) {
+    String obstacleType = obstacle.getKind();
     
-    // Check collision with obstacles using colliders
-    if (currentObstacles != null) {
-      for (Obstacle obstacle : currentObstacles) {
-        if (obstacle.isCollidingWith(x, y, size)) {
-          shouldRemove = true;
-          return;
-        }
-      }
+    if (obstacleType.equals("rectangle")) {
+      RectangleObstacle rect = (RectangleObstacle) obstacle;
+      return calculateRectangleBounce(rect, bulletX, bulletY);
+    } else if (obstacleType.equals("sphere")) {
+      SphereObstacle sphere = (SphereObstacle) obstacle;
+      return calculateSphereBounce(sphere, bulletX, bulletY);
+    } else if (obstacleType.equals("triangle")) {
+      TriangleObstacle triangle = (TriangleObstacle) obstacle;
+      return calculateTriangleBounce(triangle, bulletX, bulletY);
+    }
+    
+    // Default: reverse direction
+    return angle + 180;
+  }
+  
+  private float calculateRectangleBounce(RectangleObstacle rect, float bulletX, float bulletY) {
+    // Get rectangle collider for position and size
+    RectangleCollider rectCollider = (RectangleCollider) rect.collider;
+    float rectX = rectCollider.getX();
+    float rectY = rectCollider.getY();
+    float rectWidth = rectCollider.getWidth();
+    float rectHeight = rectCollider.getHeight();
+    
+    // Determine which side of rectangle was hit
+    float left = rectX - rectWidth/2;
+    float right = rectX + rectWidth/2;
+    float top = rectY - rectHeight/2;
+    float bottom = rectY + rectHeight/2;
+    
+    // Calculate distances to each edge
+    float distToLeft = abs(bulletX - left);
+    float distToRight = abs(bulletX - right);
+    float distToTop = abs(bulletY - top);
+    float distToBottom = abs(bulletY - bottom);
+    
+    float minDist = min(min(distToLeft, distToRight), min(distToTop, distToBottom));
+    
+    // Reflect based on closest edge
+    if (minDist == distToLeft || minDist == distToRight) {
+      // Hit left or right edge - reflect horizontally
+      return 180 - angle;
+    } else {
+      // Hit top or bottom edge - reflect vertically
+      return -angle;
     }
   }
   
+  private float calculateSphereBounce(SphereObstacle sphere, float bulletX, float bulletY) {
+    // Get sphere collider for position
+    SphereCollider sphereCollider = (SphereCollider) sphere.collider;
+    float sphereX = sphereCollider.getX();
+    float sphereY = sphereCollider.getY();
+    
+    // Calculate normal vector from sphere center to bullet
+    float normalX = bulletX - sphereX;
+    float normalY = bulletY - sphereY;
+    
+    // Normalize the normal vector
+    float normalLength = sqrt(normalX * normalX + normalY * normalY);
+    if (normalLength > 0) {
+      normalX /= normalLength;
+      normalY /= normalLength;
+    }
+    
+    // Convert current angle to velocity vector
+    float vx = cos(radians(angle));
+    float vy = sin(radians(angle));
+    
+    // Reflect velocity using normal: v' = v - 2(v·n)n
+    float dotProduct = vx * normalX + vy * normalY;
+    float reflectedVx = vx - 2 * dotProduct * normalX;
+    float reflectedVy = vy - 2 * dotProduct * normalY;
+    
+    // Convert back to angle
+    return degrees(atan2(reflectedVy, reflectedVx));
+  }
+  
+  private float calculateTriangleBounce(TriangleObstacle triangle, float bulletX, float bulletY) {
+    // For simplicity with triangles, find the closest edge and reflect off it
+    TriangleCollider triCollider = (TriangleCollider) triangle.collider;
+    
+    // Calculate distances to each edge
+    float dist1 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX1(), triCollider.getY1(), triCollider.getX2(), triCollider.getY2());
+    float dist2 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX2(), triCollider.getY2(), triCollider.getX3(), triCollider.getY3());
+    float dist3 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX3(), triCollider.getY3(), triCollider.getX1(), triCollider.getY1());
+    
+    // Find closest edge and calculate normal
+    float edgeAngle;
+    if (dist1 <= dist2 && dist1 <= dist3) {
+      // Closest to edge 1-2
+      edgeAngle = atan2(triCollider.getY2() - triCollider.getY1(), triCollider.getX2() - triCollider.getX1());
+    } else if (dist2 <= dist3) {
+      // Closest to edge 2-3
+      edgeAngle = atan2(triCollider.getY3() - triCollider.getY2(), triCollider.getX3() - triCollider.getX2());
+    } else {
+      // Closest to edge 3-1
+      edgeAngle = atan2(triCollider.getY1() - triCollider.getY3(), triCollider.getX1() - triCollider.getX3());
+    }
+    
+    // Calculate reflection angle
+    float normalAngle = edgeAngle + 90; // Normal is perpendicular to edge
+    float incidentAngle = angle - normalAngle;
+    return normalAngle - incidentAngle;
+  }
+  
+  // Helper method for triangle bounce calculation
+  private float distancePointToLineSegment(float px, float py, float x1, float y1, float x2, float y2) {
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    float lengthSquared = dx * dx + dy * dy;
+    
+    if (lengthSquared == 0) {
+      return dist(px, py, x1, y1);
+    }
+    
+    float t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
+    t = constrain(t, 0, 1);
+    
+    float closestX = x1 + t * dx;
+    float closestY = y1 + t * dy;
+    
+    return dist(px, py, closestX, closestY);
+  }
+
   public void display() {
     // Set bullet color based on which player fired it
+    // Dim the color based on number of bounces for visual feedback
+    float bouceColorIntensity = map(bounces, 0, maxBounces, 255, 100);
+    float timeColorIntensity = map(java.time.Duration.between(bulletCreationTime, LocalDateTime.now()).getSeconds(), 0, maxBulletLifetime, 255, 100);
+    
+    float colorIntensity = min(bouceColorIntensity, timeColorIntensity);
+    
     if (playerId == 1) {
-      fill(255, 200, 200); // Light red for Player 1
+      fill(colorIntensity, colorIntensity * 0.8, colorIntensity * 0.8); // Dimming red for Player 1
       stroke(255, 100, 100);
     } else {
-      fill(200, 200, 255); // Light blue for Player 2
+      fill(colorIntensity * 0.8, colorIntensity * 0.8, colorIntensity); // Dimming blue for Player 2
       stroke(100, 100, 255);
     }
     
@@ -570,30 +926,45 @@ class Bullet {
     rotate(radians(angle + 45)); // Rotate 45 degrees for diamond shape
     rect(0, 0, size, size);
     popMatrix();
+    
+    // Draw bounce count indicator (small text above bullet)
+    if (bounces > 0) {
+      fill(255, 255, 0);
+      textAlign(CENTER);
+      textSize(8);
+      text(bounces, x, y - 10);
+    }
   }
-  
+
   public boolean shouldRemove() {
     return shouldRemove;
   }
-  
+
   public SphereCollider getCollider() {
     return collider;
   }
 }
 
-// Player class
+// Player class - now takes Game reference
 class Player {
+  private BulletCreator bulletCreator;
+  private ObstacleProvider obstacleProvider;
+  private PlayerProvider playerProvider;
   private int id;
   private float x, y;
   private float orientation;
+  private LocalDateTime lastHitTime;
   private float speed = 2.0;
   private float rotationSpeed = 3.0;
   final private float size = 20; // Tank size (square)
-  private int shootCooldown = 0; // Cooldown timer for shooting
-  private final int maxShootCooldown = 15; // Frames between shots
+  private LocalDateTime lastShotTime = null; // Track last shot time
+  private final int shootCooldownSeconds = 4; // Cooldown in seconds
   private RectangleCollider collider; // Use rectangle collider for players
 
-  Player(int id, float x, float y, float orientation) {
+  Player(BulletCreator bulletCreator, ObstacleProvider obstacleProvider, PlayerProvider playerProvider, int id, float x, float y, float orientation) {
+    this.bulletCreator = bulletCreator;
+    this.obstacleProvider = obstacleProvider;
+    this.playerProvider = playerProvider;
     this.id = id;
     this.x = x;
     this.y = y;
@@ -602,11 +973,6 @@ class Player {
   }
 
   public void display() {
-    // Update cooldown
-    if (shootCooldown > 0) {
-      shootCooldown--;
-    }
-    
     // Set player colors
     if (id == 1) {
       fill(255, 100, 100); // Red for Player 1
@@ -649,12 +1015,15 @@ class Player {
     popMatrix();
 
     // Draw cooldown indicator
-    if (shootCooldown > 0) {
-      stroke(255, 255, 0);
-      strokeWeight(2);
-      noFill();
-      float cooldownAngle = map(shootCooldown, 0, maxShootCooldown, 0, TWO_PI);
-      arc(x, y, size + 8, size + 8, -PI/2, -PI/2 + cooldownAngle);
+    if (lastShotTime != null) {
+      float elapsed = java.time.Duration.between(lastShotTime, LocalDateTime.now()).getSeconds();
+      if (elapsed < shootCooldownSeconds) {
+        stroke(255, 255, 0);
+        strokeWeight(2);
+        noFill();
+        float cooldownAngle = map(elapsed, 0, shootCooldownSeconds, 0, TWO_PI);
+        arc(x, y, size + 8, size + 8, -PI/2, -PI/2 + cooldownAngle);
+      }
     }
 
     // Debug: Draw hitbox outline (optional - comment out if not needed)
@@ -677,13 +1046,14 @@ class Player {
   }
 
   public void shoot() {
-    if (shootCooldown <= 0) {
+    LocalDateTime now = LocalDateTime.now();
+    if (lastShotTime == null || java.time.Duration.between(lastShotTime, now).getSeconds() >= shootCooldownSeconds) {
       // Calculate bullet spawn position (slightly in front of tank)
       float bulletX = x + cos(radians(orientation)) * (size/2 + 5);
       float bulletY = y + sin(radians(orientation)) * (size/2 + 5);
-      
-      createBullet(bulletX, bulletY, orientation, id);
-      shootCooldown = maxShootCooldown;
+
+      bulletCreator.createBullet(bulletX, bulletY, orientation, id);
+      lastShotTime = now;
     }
   }
 
@@ -750,12 +1120,15 @@ class Player {
   // Check if tank has any collisions using colliders
   private boolean hasCollisions() {
     // Check collision with other player
+    Player player1 = playerProvider.getPlayerByID(1);
+    Player player2 = playerProvider.getPlayerByID(2);
     Player otherPlayer = (this == player1) ? player2 : player1;
     if (isCollidingWith(otherPlayer)) {
       return true;
     }
 
     // Check collision with obstacles using colliders
+    ArrayList<Obstacle> currentObstacles = obstacleProvider.getCurrentObstacles();
     if (currentObstacles != null) {
       for (int i = 0; i < currentObstacles.size(); i++) {
         Obstacle obstacle = currentObstacles.get(i);
@@ -768,12 +1141,29 @@ class Player {
     return false;
   }
 
+  public boolean isOnHitCooldown() {
+    // Check if player is on hit cooldown
+    if (lastHitTime == null) return false;
+    LocalDateTime now = LocalDateTime.now();
+    // Check if the player was hit within the last 3 seconds
+    return lastHitTime.isAfter(now.minusSeconds(3));
+  }
+
+  public void wasHit() {
+    // Handle player being hit (e.g. flash, sound, etc.)
+    lastHitTime = LocalDateTime.now();
+  }
+
   public void rotateLeft() {
-    orientation -= rotationSpeed;
+    this.rotateWithSpeed(-rotationSpeed);
+  }
+
+  public void rotateWithSpeed(float speed) {
+    orientation += speed;
   }
 
   public void rotateRight() {
-    orientation += rotationSpeed;
+    this.rotateWithSpeed(rotationSpeed);
   }
 
   // Getters for accessing position, size, and collider
@@ -782,21 +1172,29 @@ class Player {
   public float getSize() { return size; }
   public float getOrientation() { return orientation; }
   public RectangleCollider getCollider() { return collider; }
+
+  // Set position and orientation (used for random respawn)
+  public void setPositionAndOrientation(float x, float y, float orientation) {
+    this.x = x;
+    this.y = y;
+    this.orientation = orientation;
+    this.collider.updatePosition(x, y);
+  }
 }
 
 // Base Collider class - handles collision detection logic
 abstract class Collider {
   protected String type;
-  
+
   public Collider(String type) {
     this.type = type;
   }
-  
+
   public abstract boolean isCollidingWith(float x, float y, float size);
   public abstract boolean isCollidingWith(Player player);
   public abstract boolean isCollidingWith(Collider other);
   public abstract void updatePosition(float... params);
-  
+
   public String getType() {
     return type;
   }
@@ -805,7 +1203,7 @@ abstract class Collider {
 // Rectangle Collider
 class RectangleCollider extends Collider {
   private float x, y, width, height;
-  
+
   public RectangleCollider(float x, float y, float width, float height) {
     super("rectangle");
     this.x = x;
@@ -821,13 +1219,13 @@ class RectangleCollider extends Collider {
       this.y = params[1];
     }
   }
-  
+
   // Update size - useful for dynamic obstacles
   public void updateSize(float newWidth, float newHeight) {
     this.width = newWidth;
     this.height = newHeight;
   }
-  
+
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
@@ -838,7 +1236,7 @@ class RectangleCollider extends Collider {
             py - playerSize/2 < y + height/2 &&
             py + playerSize/2 > y - height/2);
   }
-  
+
   public boolean isCollidingWith(Collider other) {
     if (other instanceof RectangleCollider) {
       RectangleCollider rect = (RectangleCollider) other;
@@ -856,7 +1254,7 @@ class RectangleCollider extends Collider {
     }
     return false;
   }
-  
+
   // Getters for position and size
   public float getX() { return x; }
   public float getY() { return y; }
@@ -867,14 +1265,14 @@ class RectangleCollider extends Collider {
 // Sphere Collider
 class SphereCollider extends Collider {
   private float x, y, radius;
-  
+
   public SphereCollider(float x, float y, float radius) {
     super("sphere");
     this.x = x;
     this.y = y;
     this.radius = radius;
   }
-  
+
   // Update position - params: newX, newY
   public void updatePosition(float... params) {
     if (params.length >= 2) {
@@ -882,21 +1280,21 @@ class SphereCollider extends Collider {
       this.y = params[1];
     }
   }
-  
+
   // Update radius - useful for dynamic obstacles
   public void updateRadius(float newRadius) {
     this.radius = newRadius;
   }
-  
+
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
-  
+
   public boolean isCollidingWith(float px, float py, float playerSize) {
     float distance = dist(px, py, x, y);
     return distance < (playerSize/2 + radius);
   }
-  
+
   public boolean isCollidingWith(Collider other) {
     if (other instanceof SphereCollider) {
       SphereCollider sphere = (SphereCollider) other;
@@ -912,7 +1310,7 @@ class SphereCollider extends Collider {
     }
     return false;
   }
-  
+
   // Getters for position and radius
   public float getX() { return x; }
   public float getY() { return y; }
@@ -922,7 +1320,7 @@ class SphereCollider extends Collider {
 // Triangle Collider
 class TriangleCollider extends Collider {
   private float x1, y1, x2, y2, x3, y3;
-  
+
   public TriangleCollider(float x1, float y1, float x2, float y2, float x3, float y3) {
     super("triangle");
     this.x1 = x1;
@@ -932,7 +1330,7 @@ class TriangleCollider extends Collider {
     this.x3 = x3;
     this.y3 = y3;
   }
-  
+
   // Update position - params: x1, y1, x2, y2, x3, y3
   public void updatePosition(float... params) {
     if (params.length >= 6) {
@@ -944,11 +1342,11 @@ class TriangleCollider extends Collider {
       this.y3 = params[5];
     }
   }
-  
+
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
-  
+
   public boolean isCollidingWith(float px, float py, float playerSize) {
     float playerRadius = playerSize / 2;
     
@@ -966,7 +1364,7 @@ class TriangleCollider extends Collider {
     
     return minDistanceToEdge <= playerRadius;
   }
-  
+
   public boolean isCollidingWith(Collider other) {
     if (other instanceof SphereCollider) {
       SphereCollider sphere = (SphereCollider) other;
@@ -978,7 +1376,7 @@ class TriangleCollider extends Collider {
     }
     return false;
   }
-  
+
   // Check if a point is inside the triangle using barycentric coordinates
   private boolean isPointInTriangle(float px, float py) {
     float denom = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
@@ -990,7 +1388,7 @@ class TriangleCollider extends Collider {
     
     return a >= 0 && b >= 0 && c >= 0;
   }
-  
+
   // Calculate distance from point to line segment
   private float distancePointToLineSegment(float px, float py, float x1, float y1, float x2, float y2) {
     float dx = x2 - x1;
@@ -1007,14 +1405,14 @@ class TriangleCollider extends Collider {
     
     // Clamp t to [0, 1] to stay within line segment
     t = constrain(t, 0, 1);
-    
+
     // Find closest point on line segment
     float closestX = x1 + t * dx;
     float closestY = y1 + t * dy;
-    
+
     return dist(px, py, closestX, closestY);
   }
-  
+
   // Getters for vertices
   public float getX1() { return x1; }
   public float getY1() { return y1; }
@@ -1031,28 +1429,28 @@ abstract class Obstacle {
   protected color strokeColor;
   protected float strokeWeight;
   protected Collider collider;
-  
+
   public Obstacle(String kind, Collider collider) {
     this.kind = kind;
     this.collider = collider;
     this.strokeWeight = 2;
   }
-  
+
   public void setStyle(color fillColor, color strokeColor) {
     this.fillColor = fillColor;
     this.strokeColor = strokeColor;
   }
-  
+
   public abstract void display();
-  
+
   public boolean isCollidingWith(Player player) {
     return collider.isCollidingWith(player);
   }
-  
+
   public boolean isCollidingWith(float x, float y, float size) {
     return collider.isCollidingWith(x, y, size);
   }
-  
+
   public String getKind() {
     return kind;
   }
@@ -1062,7 +1460,7 @@ abstract class Obstacle {
 class RectangleObstacle extends Obstacle {
   private float x, y;
   private float width, height;
-  
+
   public RectangleObstacle(float x, float y, float width, float height) {
     super("rectangle", new RectangleCollider(x, y, width, height));
     this.x = x;
@@ -1070,7 +1468,7 @@ class RectangleObstacle extends Obstacle {
     this.width = width;
     this.height = height;
   }
-  
+
   public void display() {
     fill(fillColor);
     stroke(strokeColor);
@@ -1084,14 +1482,14 @@ class RectangleObstacle extends Obstacle {
 class SphereObstacle extends Obstacle {
   private float x, y;
   private float radius;
-  
+
   public SphereObstacle(float x, float y, float radius) {
     super("sphere", new SphereCollider(x, y, radius));
     this.x = x;
     this.y = y;
     this.radius = radius;
   }
-  
+
   public void display() {
     fill(fillColor);
     stroke(strokeColor);
@@ -1103,7 +1501,7 @@ class SphereObstacle extends Obstacle {
 // Triangle Obstacle - simplified, uses TriangleCollider
 class TriangleObstacle extends Obstacle {
   private float x1, y1, x2, y2, x3, y3;
-  
+
   public TriangleObstacle(float x1, float y1, float x2, float y2, float x3, float y3) {
     super("triangle", new TriangleCollider(x1, y1, x2, y2, x3, y3));
     this.x1 = x1;
@@ -1113,7 +1511,7 @@ class TriangleObstacle extends Obstacle {
     this.x3 = x3;
     this.y3 = y3;
   }
-  
+
   public void display() {
     fill(fillColor);
     stroke(strokeColor);
