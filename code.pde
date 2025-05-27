@@ -593,10 +593,47 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     // Handle player hit logic here if needed
     println("Player " + playerId + " was hit!");
     Player player = getPlayerByID(playerId);
+    Player otherPlayer = (playerId == 1) ? player2 : player1;
     if (player != null) {
       player.wasHit(); // Set hit state
+      // Move both players to random valid locations
+      placePlayerRandomly(otherPlayer);
       // Additional logic for hit can be added here
     }
+  }
+
+  // Place a player at a random valid location (not colliding with obstacles or other player)
+  private void placePlayerRandomly(Player player) {
+    int maxTries = 100;
+    float margin = 40;
+    float size = player.getSize();
+    for (int i = 0; i < maxTries; i++) {
+      float x = random(margin + size/2, width - margin - size/2);
+      float y = random(margin + size/2, height - margin - size/2);
+      float orientation = random(0, 360);
+      player.setPositionAndOrientation(x, y, orientation);
+      // Check for collisions
+      boolean collides = false;
+      // Check obstacles
+      ArrayList<Obstacle> obs = getCurrentObstacles();
+      if (obs != null) {
+        for (Obstacle o : obs) {
+          if (o.isCollidingWith(player)) {
+            collides = true;
+            break;
+          }
+        }
+      }
+      // Check other player
+      Player other = (player == player1) ? player2 : player1;
+      if (other != null && player.isCollidingWith(other)) {
+        collides = true;
+      }
+      if (!collides) {
+        return;
+      }
+    }
+    // If no valid position found after maxTries, do nothing
   }
 }
 
@@ -932,6 +969,14 @@ class Player {
   public float getSize() { return size; }
   public float getOrientation() { return orientation; }
   public RectangleCollider getCollider() { return collider; }
+
+  // Set position and orientation (used for random respawn)
+  public void setPositionAndOrientation(float x, float y, float orientation) {
+    this.x = x;
+    this.y = y;
+    this.orientation = orientation;
+    this.collider.updatePosition(x, y);
+  }
 }
 
 // Base Collider class - handles collision detection logic
