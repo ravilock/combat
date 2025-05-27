@@ -723,17 +723,80 @@ class TriangleObstacle extends Obstacle {
     strokeWeight(this.strokeWeight);
     triangle(x1, y1, x2, y2, x3, y3);
   }
-
+  
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
-
+  
   public boolean isCollidingWith(float px, float py, float playerSize) {
-    // Simplified collision - check distance to each vertex
-    float minDistance = min(
-      dist(px, py, x1, y1),
-      min(dist(px, py, x2, y2), dist(px, py, x3, y3))
-    );
-    return minDistance < playerSize/2 + 10;
+    float playerRadius = playerSize / 2;
+    
+    // First check if player center is inside triangle
+    if (isPointInTriangle(px, py)) {
+      return true;
+    }
+    
+    // Check distance to each edge of the triangle
+    float dist1 = distancePointToLineSegment(px, py, x1, y1, x2, y2);
+    float dist2 = distancePointToLineSegment(px, py, x2, y2, x3, y3);
+    float dist3 = distancePointToLineSegment(px, py, x3, y3, x1, y1);
+    
+    float minDistanceToEdge = min(dist1, min(dist2, dist3));
+    
+    return minDistanceToEdge <= playerRadius;
   }
+  
+  // Check if a point is inside the triangle using barycentric coordinates
+  private boolean isPointInTriangle(float px, float py) {
+    float denom = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
+    if (abs(denom) < 0.001) return false; // Degenerate triangle
+    
+    float a = ((y2 - y3) * (px - x3) + (x3 - x2) * (py - y3)) / denom;
+    float b = ((y3 - y1) * (px - x3) + (x1 - x3) * (py - y3)) / denom;
+    float c = 1 - a - b;
+    
+    return a >= 0 && b >= 0 && c >= 0;
+  }
+  
+  // Calculate distance from point to line segment
+  private float distancePointToLineSegment(float px, float py, float x1, float y1, float x2, float y2) {
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    float lengthSquared = dx * dx + dy * dy;
+    
+    if (lengthSquared == 0) {
+      // Line segment is actually a point
+      return dist(px, py, x1, y1);
+    }
+    
+    // Calculate parameter t for projection of point onto line
+    float t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
+    
+    // Clamp t to [0, 1] to stay within line segment
+    t = constrain(t, 0, 1);
+    
+    // Find closest point on line segment
+    float closestX = x1 + t * dx;
+    float closestY = y1 + t * dy;
+    
+    return dist(px, py, closestX, closestY);
+  }
+  
+  // Optional: Get the triangle's bounding box for broad-phase collision detection
+  public boolean isInBoundingBox(float px, float py, float margin) {
+    float minX = min(x1, min(x2, x3)) - margin;
+    float maxX = max(x1, max(x2, x3)) + margin;
+    float minY = min(y1, min(y2, y3)) - margin;
+    float maxY = max(y1, max(y2, y3)) + margin;
+    
+    return px >= minX && px <= maxX && py >= minY && py <= maxY;
+  }
+  
+  // Getters for triangle vertices (useful for debugging or other calculations)
+  public float getX1() { return x1; }
+  public float getY1() { return y1; }
+  public float getX2() { return x2; }
+  public float getY2() { return y2; }
+  public float getX3() { return x3; }
+  public float getY3() { return y3; }
 }
