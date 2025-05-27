@@ -1,6 +1,8 @@
 // Combat Game - Multi-Map Obstacle Rendere
 // Refactored with Game class to manage all game state
 
+import java.time.LocalDateTime;
+
 // Global game instance
 Game game;
 
@@ -43,8 +45,12 @@ interface ScoreIncreaser {
   void increaseScore(int playerId);
 }
 
+interface PlayerHitListener {
+  void onPlayerHit(int playerId);
+}
+
 // Main Game class - contains all game state and logic
-class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncreaser {
+class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncreaser, PlayerHitListener {
   // Key state tracking
   private boolean[] keys = new boolean[256];
   private boolean[] keyCodes = new boolean[256];
@@ -101,6 +107,9 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     
     // Handle movement keys
     handleMovementKeys();
+
+    // Handle player hit animation
+    handlePlayerHitAnimation();
   }
 
   public void render() {
@@ -392,13 +401,17 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     // Shooting controls
     if (key == ' ') { // Spacebar for Player 1
       if (player1 != null) {
-        player1.shoot();
+        if (!player1.isOnHitCooldown()) { // Prevent shooting if on hit cooldown
+          player1.shoot();
+        }
       }
     }
     
     if (keyCode == ENTER) { // Enter key for Player 2
       if (player2 != null) {
-        player2.shoot();
+        if (!player2.isOnHitCooldown()) { // Prevent shooting if on hit cooldown
+          player2.shoot();
+        }
       }
     }
 
@@ -437,6 +450,10 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
 
     // Player 1 controls (WASD) - using lowercase for consistency
     if (player1 != null) {
+      if (player1.isOnHitCooldown()) {
+        // If player is on hit cooldown, prevent movement
+        return;
+      }
       if (keys['w'] || keys['W']) {
         player1.moveForward();
       }
@@ -453,6 +470,10 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
 
     // Player 2 controls (Arrow keys)
     if (player2 != null) {
+      if (player2.isOnHitCooldown()) {
+        // If player is on hit cooldown, prevent movement
+        return;
+      }
       if (keyCodes[UP]) {
         player2.moveForward();
       }
@@ -464,6 +485,21 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
       }
       if (keyCodes[RIGHT]) {
         player2.rotateRight();
+      }
+    }
+  }
+
+  private void handlePlayerHitAnimation() {
+    if (!mapsLoaded) return;
+    if (player1 != null) {
+      if (player1.isOnHitCooldown()) {
+        player1.rotateWithSpeed(12); // Optional: Rotate player 1 slightly to indicate hit
+      }
+    }
+
+    if (player2 != null) {
+      if (player2.isOnHitCooldown()) {
+        player2.rotateWithSpeed(12); // Optional: Rotate player 2 slightly to indicate hit
       }
     }
   }
@@ -497,7 +533,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   }
 
   public void createBullet(float x, float y, float angle, int playerId) {
-    bullets.add(new Bullet(this, this, this, x, y, angle, playerId));
+    bullets.add(new Bullet(this, this, this, this, x, y, angle, playerId));
   }
 
   // Getters for game state (used by Player and Bullet classes)
@@ -522,6 +558,16 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     }
     println("Player " + playerId + " scored! New score: " + scores[playerId - 1]);
   }
+
+  public void onPlayerHit(int playerId) {
+    // Handle player hit logic here if needed
+    println("Player " + playerId + " was hit!");
+    Player player = getPlayerByID(playerId);
+    if (player != null) {
+      player.wasHit(); // Set hit state
+      // Additional logic for hit can be added here
+    }
+  }
 }
 
 // Bullet class - now takes Game reference
@@ -529,6 +575,7 @@ class Bullet {
   private ObstacleProvider obstacleProvider;
   private PlayerProvider playerProvider;
   private ScoreIncreaser scoreIncreaser;
+  private PlayerHitListener playerHitListener;
   private float x, y;
   private float angle;
   private float speed = 4.0; // Slightly faster than player speed
@@ -537,10 +584,11 @@ class Bullet {
   private float size = 6; // Small square bullet
   private SphereCollider collider; // Use sphere collider for bullets
 
-  public Bullet(ObstacleProvider obstacleProvider, PlayerProvider playerProvider, ScoreIncreaser scoreIncreaser, float startX, float startY, float angle, int playerId) {
+  public Bullet(ObstacleProvider obstacleProvider, PlayerProvider playerProvider, ScoreIncreaser scoreIncreaser, PlayerHitListener playerHitListener, float startX, float startY, float angle, int playerId) {
     this.obstacleProvider = obstacleProvider;
     this.playerProvider = playerProvider;
     this.scoreIncreaser = scoreIncreaser;
+    this.playerHitListener = playerHitListener;
     this.x = startX;
     this.y = startY;
     this.angle = angle;
@@ -569,7 +617,7 @@ class Bullet {
     if (player1 != null && playerId != 1) {
       if (collider.isCollidingWith(player1.getCollider())) {
         scoreIncreaser.increaseScore(2); // Player 2 scores
-        println("Player 1 hit by Player " + playerId + "'s bullet!");
+        playerHitListener.onPlayerHit(1); // Notify player hit
         shouldRemove = true;
         return;
       }
@@ -578,7 +626,7 @@ class Bullet {
     if (player2 != null && playerId != 2) {
       if (collider.isCollidingWith(player2.getCollider())) {
         scoreIncreaser.increaseScore(1); // Player 1 scores
-        println("Player 2 hit by Player " + playerId + "'s bullet!");
+        playerHitListener.onPlayerHit(2); // Notify player hit
         shouldRemove = true;
         return;
       }
@@ -634,6 +682,7 @@ class Player {
   private int id;
   private float x, y;
   private float orientation;
+  private LocalDateTime lastHitTime;
   private float speed = 2.0;
   private float rotationSpeed = 3.0;
   final private float size = 20; // Tank size (square)
@@ -822,12 +871,29 @@ class Player {
     return false;
   }
 
+  public boolean isOnHitCooldown() {
+    // Check if player is on hit cooldown
+    if (lastHitTime == null) return false;
+    LocalDateTime now = LocalDateTime.now();
+    // Check if the player was hit within the last 3 seconds
+    return lastHitTime.isAfter(now.minusSeconds(3));
+  }
+
+  public void wasHit() {
+    // Handle player being hit (e.g. flash, sound, etc.)
+    lastHitTime = LocalDateTime.now();
+  }
+
   public void rotateLeft() {
-    orientation -= rotationSpeed;
+    this.rotateWithSpeed(-rotationSpeed);
+  }
+
+  public void rotateWithSpeed(float speed) {
+    orientation += speed;
   }
 
   public void rotateRight() {
-    orientation += rotationSpeed;
+    this.rotateWithSpeed(rotationSpeed);
   }
 
   // Getters for accessing position, size, and collider
