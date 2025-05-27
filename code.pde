@@ -785,6 +785,7 @@ abstract class Collider {
   
   public abstract boolean isCollidingWith(float x, float y, float size);
   public abstract boolean isCollidingWith(Player player);
+  public abstract void updatePosition(float... params);
   
   public String getType() {
     return type;
@@ -802,6 +803,20 @@ class RectangleCollider extends Collider {
     this.width = width;
     this.height = height;
   }
+
+  // Update position - params: newX, newY
+  public void updatePosition(float... params) {
+    if (params.length >= 2) {
+      this.x = params[0];
+      this.y = params[1];
+    }
+  }
+  
+  // Update size - useful for dynamic obstacles
+  public void updateSize(float newWidth, float newHeight) {
+    this.width = newWidth;
+    this.height = newHeight;
+  }
   
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
@@ -814,6 +829,12 @@ class RectangleCollider extends Collider {
             py - playerSize/2 < y + height/2 &&
             py + playerSize/2 > y - height/2);
   }
+  
+  // Getters for position and size
+  public float getX() { return x; }
+  public float getY() { return y; }
+  public float getWidth() { return width; }
+  public float getHeight() { return height; }
 }
 
 // Sphere Collider
@@ -827,6 +848,19 @@ class SphereCollider extends Collider {
     this.radius = radius;
   }
   
+  // Update position - params: newX, newY
+  public void updatePosition(float... params) {
+    if (params.length >= 2) {
+      this.x = params[0];
+      this.y = params[1];
+    }
+  }
+  
+  // Update radius - useful for dynamic obstacles
+  public void updateRadius(float newRadius) {
+    this.radius = newRadius;
+  }
+  
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
@@ -835,6 +869,11 @@ class SphereCollider extends Collider {
     float distance = dist(px, py, x, y);
     return distance < (playerSize/2 + radius);
   }
+  
+  // Getters for position and radius
+  public float getX() { return x; }
+  public float getY() { return y; }
+  public float getRadius() { return radius; }
 }
 
 // Triangle Collider
@@ -849,6 +888,18 @@ class TriangleCollider extends Collider {
     this.y2 = y2;
     this.x3 = x3;
     this.y3 = y3;
+  }
+  
+  // Update position - params: x1, y1, x2, y2, x3, y3
+  public void updatePosition(float... params) {
+    if (params.length >= 6) {
+      this.x1 = params[0];
+      this.y1 = params[1];
+      this.x2 = params[2];
+      this.y2 = params[3];
+      this.x3 = params[4];
+      this.y3 = params[5];
+    }
   }
   
   public boolean isCollidingWith(Player player) {
@@ -908,6 +959,14 @@ class TriangleCollider extends Collider {
     
     return dist(px, py, closestX, closestY);
   }
+  
+  // Getters for vertices
+  public float getX1() { return x1; }
+  public float getY1() { return y1; }
+  public float getX2() { return x2; }
+  public float getY2() { return y2; }
+  public float getX3() { return x3; }
+  public float getY3() { return y3; }
 }
 
 // Base Obstacle class - now uses composition with Collider
