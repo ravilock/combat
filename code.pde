@@ -957,8 +957,8 @@ class Player {
   private float speed = 2.0;
   private float rotationSpeed = 3.0;
   final private float size = 20; // Tank size (square)
-  private int shootCooldown = 0; // Cooldown timer for shooting
-  private final int maxShootCooldown = 15; // Frames between shots
+  private LocalDateTime lastShotTime = null; // Track last shot time
+  private final int shootCooldownSeconds = 4; // Cooldown in seconds
   private RectangleCollider collider; // Use rectangle collider for players
 
   Player(BulletCreator bulletCreator, ObstacleProvider obstacleProvider, PlayerProvider playerProvider, int id, float x, float y, float orientation) {
@@ -973,11 +973,6 @@ class Player {
   }
 
   public void display() {
-    // Update cooldown
-    if (shootCooldown > 0) {
-      shootCooldown--;
-    }
-    
     // Set player colors
     if (id == 1) {
       fill(255, 100, 100); // Red for Player 1
@@ -1020,12 +1015,15 @@ class Player {
     popMatrix();
 
     // Draw cooldown indicator
-    if (shootCooldown > 0) {
-      stroke(255, 255, 0);
-      strokeWeight(2);
-      noFill();
-      float cooldownAngle = map(shootCooldown, 0, maxShootCooldown, 0, TWO_PI);
-      arc(x, y, size + 8, size + 8, -PI/2, -PI/2 + cooldownAngle);
+    if (lastShotTime != null) {
+      float elapsed = java.time.Duration.between(lastShotTime, LocalDateTime.now()).getSeconds();
+      if (elapsed < shootCooldownSeconds) {
+        stroke(255, 255, 0);
+        strokeWeight(2);
+        noFill();
+        float cooldownAngle = map(elapsed, 0, shootCooldownSeconds, 0, TWO_PI);
+        arc(x, y, size + 8, size + 8, -PI/2, -PI/2 + cooldownAngle);
+      }
     }
 
     // Debug: Draw hitbox outline (optional - comment out if not needed)
@@ -1048,13 +1046,14 @@ class Player {
   }
 
   public void shoot() {
-    if (shootCooldown <= 0) {
+    LocalDateTime now = LocalDateTime.now();
+    if (lastShotTime == null || java.time.Duration.between(lastShotTime, now).getSeconds() >= shootCooldownSeconds) {
       // Calculate bullet spawn position (slightly in front of tank)
       float bulletX = x + cos(radians(orientation)) * (size/2 + 5);
       float bulletY = y + sin(radians(orientation)) * (size/2 + 5);
-      
+
       bulletCreator.createBullet(bulletX, bulletY, orientation, id);
-      shootCooldown = maxShootCooldown;
+      lastShotTime = now;
     }
   }
 
