@@ -1,0 +1,78 @@
+{
+  "name": "Cross Roads",
+  "description": "Classic crossroads design width open combat and strategic positioning",
+  "players": [
+    {
+      "id": 1,
+      "name": "Player 1",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "orientation": 45
+    },
+    {
+      "id": 2,
+      "name": "Player 2",
+      "position": {
+        "x": 700,
+        "y": 500
+      },
+      "orientation": 225
+    }
+  ],
+  "obstacles": [
+    {
+      "kind": "Rectangle",
+      "center": {
+        "x": 400,
+        "y": 200
+      },
+      "measures": {
+        "height": 20,
+        "width": 150
+      }
+    },
+    {
+      "kind": "Rectangle",
+      "center": {
+        "x": 400,
+        "y": 400
+      },
+      "measures": {
+        "height": 20,
+        "width": 150
+      }
+    },
+    {
+      "kind": "Rectangle",
+      "center": {
+        "x": 250,
+        "y": 300
+      },
+      "measures": {
+        "height": 120,
+        "width": 20
+      }
+    },
+    {
+      "kind": "Rectangle",
+      "center": {
+        "x": 550,
+        "y": 300
+      },
+      "measures": {
+        "height": 120,
+        "width": 20
+      }
+    },
+    {
+      "kind": "Sphere",
+      "center": {
+        "x": 400,
+        "y": 300
+      },
+      "radius": 25
+    }
+  ]
+}

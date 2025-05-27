@@ -1,0 +1,103 @@
+{
+  "name": "Fortress",
+  "description": "Defensive stronghold layout width corner fortresses and central bunker",
+  "players": [
+    {
+      "id": 1,
+      "name": "Player 1",
+      "position": {
+        "x": 80,
+        "y": 300
+      },
+      "orientation": 0
+    },
+    {
+      "id": 2,
+      "name": "Player 2",
+      "position": {
+        "x": 720,
+        "y": 300
+      },
+      "orientation": 180
+    }
+  ],
+  "obstacles": [
+    {
+      "kind": "Sphere",
+      "center": {
+        "x": 150,
+        "y": 150
+      },
+      "radius": 40
+    },
+    {
+      "kind": "Sphere",
+      "center": {
+        "x": 650,
+        "y": 150
+      },
+      "radius": 40
+    },
+    {
+      "kind": "Sphere",
+      "center": {
+        "x": 150,
+        "y": 450
+      },
+      "radius": 40
+    },
+    {
+      "kind": "Sphere",
+      "center": {
+        "x": 650,
+        "y": 450
+      },
+      "radius": 40
+    },
+    {
+      "kind": "Rectangle",
+      "center": {
+        "x": 400,
+        "y": 300
+      },
+      "measures": {
+        "height": 80,
+        "width": 80
+      }
+    },
+    {
+      "kind": "Triangle",
+      "vertices": [
+        {
+          "x": 300,
+          "y": 200
+        },
+        {
+          "x": 350,
+          "y": 150
+        },
+        {
+          "x": 350,
+          "y": 250
+        }
+      ]
+    },
+    {
+      "kind": "Triangle",
+      "vertices": [
+        {
+          "x": 500,
+          "y": 200
+        },
+        {
+          "x": 450,
+          "y": 150
+        },
+        {
+          "x": 450,
+          "y": 250
+        }
+      ]
+    }
+  ]
+}
