@@ -428,6 +428,7 @@ class Player {
   private float orientation;
   private float speed = 2.0;
   private float rotationSpeed = 3.0;
+  final private float size = 20; // Tank size (square)
 
   Player(int id, float x, float y, float orientation) {
     this.id = id;
@@ -448,13 +449,13 @@ class Player {
 
     strokeWeight(2);
 
-    // Draw tank body (rectangle)
+    // Draw tank body (square)
     pushMatrix();
     translate(x, y);
     rotate(radians(orientation));
 
     rectMode(CENTER);
-    rect(0, 0, 20, 14);
+    rect(0, 0, size, size);
 
     // Draw tank barrel (line extending forward)
     stroke(255, 255, 255);
@@ -467,7 +468,7 @@ class Player {
     fill(255, 255, 255);
     textAlign(CENTER);
     textSize(10);
-    text("P" + id, x, y - 20);
+    text("P" + id, x, y - 25);
 
     // Draw orientation indicator (small arrow)
     fill(255, 255, 0);
@@ -477,21 +478,114 @@ class Player {
     rotate(radians(orientation));
     triangle(18, 0, 12, -3, 12, 3);
     popMatrix();
+
+    // Debug: Draw hitbox outline (optional - comment out if not needed)
+    drawHitbox();
+  }
+
+  // Draw hitbox for debugging purposes
+  public void drawHitbox() {
+    stroke(255, 255, 0);
+    strokeWeight(1);
+    noFill();
+    rectMode(CENTER);
+    rect(x, y, size, size);
+  }
+
+  // Check collision with another player
+  public boolean isCollidingWith(Player other) {
+    if (other == null) return false;
+
+    float distance = dist(x, y, other.x, other.y);
+    return distance < (size / 2 + other.size / 2);
+  }
+
+  // Check collision with obstacles
+  public boolean isCollidingWithObstacle(JSONObject obstacle) {
+    String kind = obstacle.getString("kind");
+    
+    switch(kind.toLowerCase()) {
+      case "rectangle":
+        return isCollidingWithRectangle(obstacle);
+      case "sphere":
+        return isCollidingWithSphere(obstacle);
+      case "triangle":
+        return isCollidingWithTriangle(obstacle);
+      default:
+        return false;
+    }
+  }
+
+  private boolean isCollidingWithRectangle(JSONObject rect) {
+    JSONObject center = rect.getJSONObject("center");
+    JSONObject measures = rect.getJSONObject("measures");
+    
+    float obstacleX = center.getFloat("x");
+    float obstacleY = center.getFloat("y");
+    float obstacleH = measures.getFloat("height");
+    float obstacleW = measures.getFloat("with");
+    
+    // Simple AABB collision detection
+    return (x - size/2 < obstacleX + obstacleW/2 &&
+            x + size/2 > obstacleX - obstacleW/2 &&
+            y - size/2 < obstacleY + obstacleH/2 &&
+            y + size/2 > obstacleY - obstacleH/2);
+  }
+
+  private boolean isCollidingWithSphere(JSONObject sphere) {
+    JSONObject center = sphere.getJSONObject("center");
+    float radius = sphere.getFloat("radius");
+    
+    float obstacleX = center.getFloat("x");
+    float obstacleY = center.getFloat("y");
+    
+    float distance = dist(x, y, obstacleX, obstacleY);
+    return distance < (size/2 + radius);
+  }
+
+  private boolean isCollidingWithTriangle(JSONObject triangle) {
+    // Simplified collision - check if tank center is close to any triangle vertex
+    JSONArray vertices = triangle.getJSONArray("vertices");
+    
+    if (vertices.size() >= 3) {
+      for (int i = 0; i < 3; i++) {
+        JSONObject vertex = vertices.getJSONObject(i);
+        float vx = vertex.getFloat("x");
+        float vy = vertex.getFloat("y");
+        
+        if (dist(x, y, vx, vy) < size/2 + 10) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   public void moveForward() {
     float dx = cos(radians(orientation)) * speed;
     float dy = sin(radians(orientation)) * speed;
 
-    // Keep players within arena bounds
+    // Calculate new position
     float newX = x + dx;
     float newY = y + dy;
 
-    if (newX > 30 && newX < width - 30) {
+    // Check arena bounds
+    if (newX > 30 + size/2 && newX < width - 30 - size/2 &&
+        newY > 30 + size/2 && newY < height - 30 - size/2) {
+
+      // Temporarily move to check collisions
+      float oldX = x, oldY = y;
       x = newX;
-    }
-    if (newY > 30 && newY < height - 30) {
       y = newY;
+
+      // Check for collisions
+      if (!hasCollisions()) {
+        // No collision, keep new position
+      } else {
+        // Collision detected, revert position
+        x = oldX;
+        y = oldY;
+      }
     }
   }
 
@@ -499,16 +593,48 @@ class Player {
     float dx = cos(radians(orientation)) * speed;
     float dy = sin(radians(orientation)) * speed;
 
-    // Keep players within arena bounds
+    // Calculate new position
     float newX = x - dx;
     float newY = y - dy;
 
-    if (newX > 30 && newX < width - 30) {
+    // Check arena bounds
+    if (newX > 30 + size/2 && newX < width - 30 - size/2 &&
+        newY > 30 + size/2 && newY < height - 30 - size/2) {
+
+      // Temporarily move to check collisions
+      float oldX = x, oldY = y;
       x = newX;
-    }
-    if (newY > 30 && newY < height - 30) {
       y = newY;
+
+      // Check for collisions
+      if (!hasCollisions()) {
+        // No collision, keep new position
+      } else {
+        // Collision detected, revert position
+        x = oldX;
+        y = oldY;
+      }
     }
+  }
+
+  // Check if tank has any collisions
+  private boolean hasCollisions() {
+    // Check collision with other player
+    Player otherPlayer = (this == player1) ? player2 : player1;
+    if (isCollidingWith(otherPlayer)) {
+      return true;
+    }
+
+    // Check collision with obstacles
+    if (currentObstacles != null) {
+      for (int i = 0; i < currentObstacles.size(); i++) {
+        if (isCollidingWithObstacle(currentObstacles.getJSONObject(i))) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   public void rotateLeft() {
@@ -518,4 +644,10 @@ class Player {
   public void rotateRight() {
     orientation += rotationSpeed;
   }
+
+  // Getters for accessing position and size
+  public float getX() { return x; }
+  public float getY() { return y; }
+  public float getSize() { return size; }
+  public float getOrientation() { return orientation; }
 }
