@@ -614,51 +614,32 @@ class Player {
   public float getOrientation() { return orientation; }
 }
 
-// Base Obstacle class
-abstract class Obstacle {
-  protected String kind;
-  protected color fillColor;
-  protected color strokeColor;
-  protected float strokeWeight;
+// Base Collider class - handles collision detection logic
+abstract class Collider {
+  protected String type;
   
-  public Obstacle(String kind) {
-    this.kind = kind;
-    this.strokeWeight = 2;
+  public Collider(String type) {
+    this.type = type;
   }
   
-  public void setStyle(color fillColor, color strokeColor) {
-    this.fillColor = fillColor;
-    this.strokeColor = strokeColor;
-  }
-  
-  public abstract void display();
-  public abstract boolean isCollidingWith(Player player);
   public abstract boolean isCollidingWith(float x, float y, float size);
+  public abstract boolean isCollidingWith(Player player);
   
-  public String getKind() {
-    return kind;
+  public String getType() {
+    return type;
   }
 }
 
-// Rectangle Obstacle
-class RectangleObstacle extends Obstacle {
-  private float x, y;
-  private float width, height;
+// Rectangle Collider
+class RectangleCollider extends Collider {
+  private float x, y, width, height;
   
-  public RectangleObstacle(float x, float y, float width, float height) {
+  public RectangleCollider(float x, float y, float width, float height) {
     super("rectangle");
     this.x = x;
     this.y = y;
     this.width = width;
     this.height = height;
-  }
-  
-  public void display() {
-    fill(fillColor);
-    stroke(strokeColor);
-    strokeWeight(this.strokeWeight);
-    rectMode(CENTER);
-    rect(x, y, width, height);
   }
   
   public boolean isCollidingWith(Player player) {
@@ -674,23 +655,15 @@ class RectangleObstacle extends Obstacle {
   }
 }
 
-// Sphere Obstacle
-class SphereObstacle extends Obstacle {
-  private float x, y;
-  private float radius;
+// Sphere Collider
+class SphereCollider extends Collider {
+  private float x, y, radius;
   
-  public SphereObstacle(float x, float y, float radius) {
+  public SphereCollider(float x, float y, float radius) {
     super("sphere");
     this.x = x;
     this.y = y;
     this.radius = radius;
-  }
-  
-  public void display() {
-    fill(fillColor);
-    stroke(strokeColor);
-    strokeWeight(this.strokeWeight);
-    ellipse(x, y, radius * 2, radius * 2);
   }
   
   public boolean isCollidingWith(Player player) {
@@ -703,11 +676,11 @@ class SphereObstacle extends Obstacle {
   }
 }
 
-// Triangle Obstacle
-class TriangleObstacle extends Obstacle {
+// Triangle Collider
+class TriangleCollider extends Collider {
   private float x1, y1, x2, y2, x3, y3;
   
-  public TriangleObstacle(float x1, float y1, float x2, float y2, float x3, float y3) {
+  public TriangleCollider(float x1, float y1, float x2, float y2, float x3, float y3) {
     super("triangle");
     this.x1 = x1;
     this.y1 = y1;
@@ -715,13 +688,6 @@ class TriangleObstacle extends Obstacle {
     this.y2 = y2;
     this.x3 = x3;
     this.y3 = y3;
-  }
-  
-  public void display() {
-    fill(fillColor);
-    stroke(strokeColor);
-    strokeWeight(this.strokeWeight);
-    triangle(x1, y1, x2, y2, x3, y3);
   }
   
   public boolean isCollidingWith(Player player) {
@@ -781,22 +747,102 @@ class TriangleObstacle extends Obstacle {
     
     return dist(px, py, closestX, closestY);
   }
+}
+
+// Base Obstacle class - now uses composition with Collider
+abstract class Obstacle {
+  protected String kind;
+  protected color fillColor;
+  protected color strokeColor;
+  protected float strokeWeight;
+  protected Collider collider;
   
-  // Optional: Get the triangle's bounding box for broad-phase collision detection
-  public boolean isInBoundingBox(float px, float py, float margin) {
-    float minX = min(x1, min(x2, x3)) - margin;
-    float maxX = max(x1, max(x2, x3)) + margin;
-    float minY = min(y1, min(y2, y3)) - margin;
-    float maxY = max(y1, max(y2, y3)) + margin;
-    
-    return px >= minX && px <= maxX && py >= minY && py <= maxY;
+  public Obstacle(String kind, Collider collider) {
+    this.kind = kind;
+    this.collider = collider;
+    this.strokeWeight = 2;
   }
   
-  // Getters for triangle vertices (useful for debugging or other calculations)
-  public float getX1() { return x1; }
-  public float getY1() { return y1; }
-  public float getX2() { return x2; }
-  public float getY2() { return y2; }
-  public float getX3() { return x3; }
-  public float getY3() { return y3; }
+  public void setStyle(color fillColor, color strokeColor) {
+    this.fillColor = fillColor;
+    this.strokeColor = strokeColor;
+  }
+  
+  public abstract void display();
+  
+  public boolean isCollidingWith(Player player) {
+    return collider.isCollidingWith(player);
+  }
+  
+  public boolean isCollidingWith(float x, float y, float size) {
+    return collider.isCollidingWith(x, y, size);
+  }
+  
+  public String getKind() {
+    return kind;
+  }
+}
+
+// Rectangle Obstacle - simplified, uses RectangleCollider
+class RectangleObstacle extends Obstacle {
+  private float x, y;
+  private float width, height;
+  
+  public RectangleObstacle(float x, float y, float width, float height) {
+    super("rectangle", new RectangleCollider(x, y, width, height));
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+  }
+  
+  public void display() {
+    fill(fillColor);
+    stroke(strokeColor);
+    strokeWeight(this.strokeWeight);
+    rectMode(CENTER);
+    rect(x, y, width, height);
+  }
+}
+
+// Sphere Obstacle - simplified, uses SphereCollider
+class SphereObstacle extends Obstacle {
+  private float x, y;
+  private float radius;
+  
+  public SphereObstacle(float x, float y, float radius) {
+    super("sphere", new SphereCollider(x, y, radius));
+    this.x = x;
+    this.y = y;
+    this.radius = radius;
+  }
+  
+  public void display() {
+    fill(fillColor);
+    stroke(strokeColor);
+    strokeWeight(this.strokeWeight);
+    ellipse(x, y, radius * 2, radius * 2);
+  }
+}
+
+// Triangle Obstacle - simplified, uses TriangleCollider
+class TriangleObstacle extends Obstacle {
+  private float x1, y1, x2, y2, x3, y3;
+  
+  public TriangleObstacle(float x1, float y1, float x2, float y2, float x3, float y3) {
+    super("triangle", new TriangleCollider(x1, y1, x2, y2, x3, y3));
+    this.x1 = x1;
+    this.y1 = y1;
+    this.x2 = x2;
+    this.y2 = y2;
+    this.x3 = x3;
+    this.y3 = y3;
+  }
+  
+  public void display() {
+    fill(fillColor);
+    stroke(strokeColor);
+    strokeWeight(this.strokeWeight);
+    triangle(x1, y1, x2, y2, x3, y3);
+  }
 }
