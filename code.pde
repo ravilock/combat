@@ -7,6 +7,7 @@ boolean[] keyCodes = new boolean[256];  // For special keys (arrow keys, etc.)
 
 JSONObject[] mapData = new JSONObject[3];
 ArrayList<Obstacle> currentObstacles;
+ArrayList<Bullet> bullets;
 int currentMap = 0;
 boolean mapsLoaded = false;
 
@@ -23,7 +24,11 @@ void setup() {
   size(800, 600);
   
   // Load all maps from files
+  // Load all maps from files
   loadAllMaps();
+  
+  // Initialize bullets list
+  bullets = new ArrayList<Bullet>();
   
   // Start with first map if loading was successful
   if (mapsLoaded) {
@@ -31,6 +36,8 @@ void setup() {
     println("Combat Arena Ready!");
     println("Current Map: " + mapNames[currentMap]);
     println("Use number keys 1-3 to switch maps");
+    println("Player 1: WASD to move, SPACE to shoot");
+    println("Player 2: Arrow keys to move, ENTER to shoot");
   } else {
     println("ERROR: Could not load map files!");
     println("Make sure the following files are in your data folder:");
@@ -55,7 +62,12 @@ void draw() {
   rect(20, 20, width-40, height-40);
   
   // Render current map obstacles
+  // Render current map obstacles
   renderObstacles();
+  
+  // Update and render bullets
+  updateBullets();
+  renderBullets();
   
   // Render player spawn points
   renderPlayers();
@@ -368,6 +380,19 @@ void handleSinglePressKeys() {
     }
   }
 
+  // Shooting controls
+  if (key == ' ') { // Spacebar for Player 1
+    if (player1 != null) {
+      player1.shoot();
+    }
+  }
+  
+  if (keyCode == ENTER) { // Enter key for Player 2
+    if (player2 != null) {
+      player2.shoot();
+    }
+  }
+
   // Debug and utility functions (only trigger once per press)
   if (key == 'r' || key == 'R') {
     println("Reloading all maps...");
@@ -392,6 +417,7 @@ void handleSinglePressKeys() {
         println("  Player 1: (" + player1.x + ", " + player1.y + ") facing " + player1.orientation + "°");
         println("  Player 2: (" + player2.x + ", " + player2.y + ") facing " + player2.orientation + "°");
       }
+      println("Active bullets: " + bullets.size());
     }
   }
 }
@@ -442,6 +468,114 @@ boolean isKeyCodePressed(int code) {
   return keyCodes[code];
 }
 
+// Bullet management functions
+void updateBullets() {
+  for (int i = bullets.size() - 1; i >= 0; i--) {
+    Bullet bullet = bullets.get(i);
+    bullet.update();
+    
+    // Remove bullet if it's out of bounds or hit something
+    if (bullet.shouldRemove()) {
+      bullets.remove(i);
+    }
+  }
+}
+
+void renderBullets() {
+  for (Bullet bullet : bullets) {
+    bullet.display();
+  }
+}
+
+void createBullet(float x, float y, float angle, int playerId) {
+  bullets.add(new Bullet(x, y, angle, playerId));
+}
+
+// Bullet class
+class Bullet {
+  private float x, y;
+  private float angle;
+  private float speed = 4.0; // Slightly faster than player speed
+  private int playerId;
+  private boolean shouldRemove = false;
+  private float size = 6; // Small square bullet
+  
+  public Bullet(float startX, float startY, float angle, int playerId) {
+    this.x = startX;
+    this.y = startY;
+    this.angle = angle;
+    this.playerId = playerId;
+  }
+  
+  public void update() {
+    // Move bullet
+    x += cos(radians(angle)) * speed;
+    y += sin(radians(angle)) * speed;
+    
+    // Check bounds
+    if (x < 20 || x > width - 20 || y < 20 || y > height - 20) {
+      shouldRemove = true;
+      return;
+    }
+    
+    // Check collision with players
+    if (player1 != null && playerId != 1) {
+      if (isCollidingWithPlayer(player1)) {
+        println("Player 1 hit by Player " + playerId + "'s bullet!");
+        shouldRemove = true;
+        return;
+      }
+    }
+    
+    if (player2 != null && playerId != 2) {
+      if (isCollidingWithPlayer(player2)) {
+        println("Player 2 hit by Player " + playerId + "'s bullet!");
+        shouldRemove = true;
+        return;
+      }
+    }
+    
+    // Check collision with obstacles
+    if (currentObstacles != null) {
+      for (Obstacle obstacle : currentObstacles) {
+        if (obstacle.isCollidingWith(x, y, size)) {
+          shouldRemove = true;
+          return;
+        }
+      }
+    }
+  }
+  
+  private boolean isCollidingWithPlayer(Player player) {
+    float distance = dist(x, y, player.getX(), player.getY());
+    return distance < (size/2 + player.getSize()/2);
+  }
+  
+  public void display() {
+    // Set bullet color based on which player fired it
+    if (playerId == 1) {
+      fill(255, 200, 200); // Light red for Player 1
+      stroke(255, 100, 100);
+    } else {
+      fill(200, 200, 255); // Light blue for Player 2
+      stroke(100, 100, 255);
+    }
+    
+    strokeWeight(1);
+    rectMode(CENTER);
+    
+    // Draw bullet as small rotated square
+    pushMatrix();
+    translate(x, y);
+    rotate(radians(angle + 45)); // Rotate 45 degrees for diamond shape
+    rect(0, 0, size, size);
+    popMatrix();
+  }
+  
+  public boolean shouldRemove() {
+    return shouldRemove;
+  }
+}
 // player info
 
 class Player {
@@ -451,6 +585,8 @@ class Player {
   private float speed = 2.0;
   private float rotationSpeed = 3.0;
   final private float size = 20; // Tank size (square)
+  private int shootCooldown = 0; // Cooldown timer for shooting
+  private final int maxShootCooldown = 15; // Frames between shots
 
   Player(int id, float x, float y, float orientation) {
     this.id = id;
@@ -460,6 +596,11 @@ class Player {
   }
 
   public void display() {
+    // Update cooldown
+    if (shootCooldown > 0) {
+      shootCooldown--;
+    }
+    
     // Set player colors
     if (id == 1) {
       fill(255, 100, 100); // Red for Player 1
@@ -501,6 +642,15 @@ class Player {
     triangle(18, 0, 12, -3, 12, 3);
     popMatrix();
 
+    // Draw cooldown indicator
+    if (shootCooldown > 0) {
+      stroke(255, 255, 0);
+      strokeWeight(2);
+      noFill();
+      float cooldownAngle = map(shootCooldown, 0, maxShootCooldown, 0, TWO_PI);
+      arc(x, y, size + 8, size + 8, -PI/2, -PI/2 + cooldownAngle);
+    }
+
     // Debug: Draw hitbox outline (optional - comment out if not needed)
     drawHitbox();
   }
@@ -520,6 +670,17 @@ class Player {
 
     float distance = dist(x, y, other.x, other.y);
     return distance < (size / 2 + other.size / 2);
+  }
+
+  public void shoot() {
+    if (shootCooldown <= 0) {
+      // Calculate bullet spawn position (slightly in front of tank)
+      float bulletX = x + cos(radians(orientation)) * (size/2 + 5);
+      float bulletY = y + sin(radians(orientation)) * (size/2 + 5);
+      
+      createBullet(bulletX, bulletY, orientation, id);
+      shootCooldown = maxShootCooldown;
+    }
   }
 
   public void moveForward() {
