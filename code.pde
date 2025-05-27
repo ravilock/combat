@@ -4,17 +4,49 @@
 import java.time.LocalDateTime;
 
 // Global game instance
+// Global game instance
 Game game;
+String gameFilesBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
+
+// Logo image
+PImage studioLogo;
+boolean showLogo = true;
+int logoDisplayFrames = 180; // Show logo for 3 seconds at 60 FPS
+float logoAlpha = 0; // For fade in/out
 
 // Processing setup function
 void setup() {
   size(800, 600);
+  studioLogo = loadImage(gameFilesBasePath + "campos-de-batalha-logo.png");
   game = new Game();
   game.initialize();
 }
 
 // Processing draw function
 void draw() {
+  if (showLogo && studioLogo != null && logoDisplayFrames > 0) {
+    background(20, 20, 20);
+    imageMode(CENTER);
+
+    // Fade in for first 1s, hold, fade out for last 1s
+    int fadeFrames = 60;
+    if (logoDisplayFrames > 180 - fadeFrames) {
+      logoAlpha = map(logoDisplayFrames, 180, 180 - fadeFrames, 0, 255);
+    } else if (logoDisplayFrames < fadeFrames) {
+      logoAlpha = map(logoDisplayFrames, fadeFrames, 0, 255, 0);
+    } else {
+      logoAlpha = 255;
+    }
+    tint(255, logoAlpha);
+    image(studioLogo, width/2, height/2, 512, 512);
+    noTint();
+
+    logoDisplayFrames--;
+    if (logoDisplayFrames == 0) {
+      showLogo = false;
+    }
+    return;
+  }
   game.update();
   game.render();
 }
@@ -67,8 +99,6 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   private String[] mapFiles = {"map1_crossroads.json", "map2_fortress.json", "map3_maze.json"};
   private String[] mapNames = new String[3];
   private String[] mapDescriptions = new String[3];
-
-  private String mapFileBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
 
   // Player instances
   private Player player1, player2;
@@ -139,7 +169,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     for (int i = 0; i < mapFiles.length; i++) {
       try {
         println("Loading " + mapFiles[i] + "...");
-        mapData[i] = loadJSONObject(mapFileBasePath + mapFiles[i]);
+        mapData[i] = loadJSONObject(gameFilesBasePath + mapFiles[i]);
         
         if (mapData[i] != null) {
           // Extract map name and description
@@ -342,7 +372,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     textSize(12);
     fill(200, 200, 200);
     for (int i = 0; i < mapFiles.length; i++) {
-      text("• " + mapFileBasePath + mapFiles[i], width/2, height/2 + 30 + i*15);
+      text("• " + gameFilesBasePath + mapFiles[i], width/2, height/2 + 30 + i*15);
     }
     
     textSize(10);
