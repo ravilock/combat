@@ -6,9 +6,7 @@ boolean[] keys = new boolean[256];  // For regular keys (a-z, 0-9, etc.)
 boolean[] keyCodes = new boolean[256];  // For special keys (arrow keys, etc.)
 
 JSONObject[] mapData = new JSONObject[3];
-JSONArray currentObstacles;
-JSONArray currentPlayers;
-
+ArrayList<Obstacle> currentObstacles;
 int currentMap = 0;
 boolean mapsLoaded = false;
 
@@ -102,8 +100,43 @@ void loadMap(int mapIndex) {
   }
 
   try {
-    currentObstacles = mapData[mapIndex].getJSONArray("obstacles");
-    currentPlayers = mapData[mapIndex].getJSONArray("players");
+    // Load obstacles from JSON and convert to Obstacle objects
+    JSONArray obstaclesArray = mapData[mapIndex].getJSONArray("obstacles");
+    currentObstacles = new ArrayList<Obstacle>();
+    for (int i = 0; i < obstaclesArray.size(); i++) {
+      JSONObject obj = obstaclesArray.getJSONObject(i);
+      String kind = obj.getString("kind").toLowerCase();
+      if (kind.equals("rectangle")) {
+        JSONObject center = obj.getJSONObject("center");
+        JSONObject measures = obj.getJSONObject("measures");
+        currentObstacles.add(new RectangleObstacle(
+          center.getFloat("x"),
+          center.getFloat("y"),
+          measures.getFloat("width"),
+          measures.getFloat("height")
+        ));
+      } else if (kind.equals("sphere")) {
+        JSONObject center = obj.getJSONObject("center");
+        currentObstacles.add(new SphereObstacle(
+          center.getFloat("x"),
+          center.getFloat("y"),
+          obj.getFloat("radius")
+        ));
+      } else if (kind.equals("triangle")) {
+        JSONArray vertices = obj.getJSONArray("vertices");
+        if (vertices.size() >= 3) {
+          JSONObject v1 = vertices.getJSONObject(0);
+          JSONObject v2 = vertices.getJSONObject(1);
+          JSONObject v3 = vertices.getJSONObject(2);
+          currentObstacles.add(new TriangleObstacle(
+            v1.getFloat("x"), v1.getFloat("y"),
+            v2.getFloat("x"), v2.getFloat("y"),
+            v3.getFloat("x"), v3.getFloat("y")
+          ));
+        }
+      }
+    }
+    JSONArray currentPlayers = mapData[mapIndex].getJSONArray("players");
 
     // Validate players array
     if (currentPlayers.size() != 2) {
@@ -111,7 +144,7 @@ void loadMap(int mapIndex) {
     }
 
     // Create Player instances from JSON data
-    createPlayersFromJSON();
+    createPlayersFromJSON(currentPlayers);
 
     println("Loaded map: " + mapNames[mapIndex] + " (" + currentObstacles.size() + " obstacles, " + currentPlayers.size() + " players)");
   } catch (Exception e) {
@@ -125,24 +158,14 @@ void renderObstacles() {
   // Set obstacle appearance based on current map
   setObstacleStyle(currentMap);
   
-  // Loop through each obstacle and render based on type
-  for (int i = 0; i < currentObstacles.size(); i++) {
-    JSONObject obstacle = currentObstacles.getJSONObject(i);
-    String kind = obstacle.getString("kind");
-    
-    switch(kind.toLowerCase()) {
-      case "rectangle":
-        renderRectangle(obstacle);
-        break;
-      case "sphere":
-        renderSphere(obstacle);
-        break;
-      case "triangle":
-        renderTriangle(obstacle);
-        break;
-      default:
-        println("Unknown obstacle type: " + kind);
-    }
+  // Get the style colors for the obstacles
+  color currentFill = g.fillColor;
+  color currentStroke = g.strokeColor;
+  
+  // Loop through each obstacle and render using their display method
+  for (Obstacle obstacle : currentObstacles) {
+    obstacle.setStyle(currentFill, currentStroke);
+    obstacle.display();
   }
 }
 
@@ -188,14 +211,14 @@ void renderSphere(JSONObject sphere) {
   ellipse(x, y, radius * 2, radius * 2);
 }
 
-void createPlayersFromJSON() {
-  if (currentPlayers == null || currentPlayers.size() < 2) {
+void createPlayersFromJSON(JSONArray players) {
+  if (players == null || players.size() < 2) {
     println("Error: Not enough player data in JSON");
     return;
   }
 
   // Create Player 1
-  JSONObject p1Data = currentPlayers.getJSONObject(0);
+  JSONObject p1Data = players.getJSONObject(0);
   JSONObject p1Pos = p1Data.getJSONObject("position");
   player1 = new Player(
     p1Data.getInt("id"),
@@ -205,7 +228,7 @@ void createPlayersFromJSON() {
   );
 
   // Create Player 2
-  JSONObject p2Data = currentPlayers.getJSONObject(1);
+  JSONObject p2Data = players.getJSONObject(1);
   JSONObject p2Pos = p2Data.getJSONObject("position");
   player2 = new Player(
     p2Data.getInt("id"),
@@ -362,10 +385,9 @@ void handleSinglePressKeys() {
       println("File: " + mapFiles[currentMap]);
       println("Obstacles: " + currentObstacles.size());
       for (int i = 0; i < currentObstacles.size(); i++) {
-        JSONObject obstacle = currentObstacles.getJSONObject(i);
-        println("  " + i + ": " + obstacle.getString("kind"));
+        Obstacle obstacle = currentObstacles.get(i);
+        println("  " + i + ": " + obstacle.getKind());
       }
-      println("Players: " + currentPlayers.size());
       if (player1 != null && player2 != null) {
         println("  Player 1: (" + player1.x + ", " + player1.y + ") facing " + player1.orientation + "°");
         println("  Player 2: (" + player2.x + ", " + player2.y + ") facing " + player2.orientation + "°");
@@ -500,67 +522,6 @@ class Player {
     return distance < (size / 2 + other.size / 2);
   }
 
-  // Check collision with obstacles
-  public boolean isCollidingWithObstacle(JSONObject obstacle) {
-    String kind = obstacle.getString("kind");
-    
-    switch(kind.toLowerCase()) {
-      case "rectangle":
-        return isCollidingWithRectangle(obstacle);
-      case "sphere":
-        return isCollidingWithSphere(obstacle);
-      case "triangle":
-        return isCollidingWithTriangle(obstacle);
-      default:
-        return false;
-    }
-  }
-
-  private boolean isCollidingWithRectangle(JSONObject rect) {
-    JSONObject center = rect.getJSONObject("center");
-    JSONObject measures = rect.getJSONObject("measures");
-    
-    float obstacleX = center.getFloat("x");
-    float obstacleY = center.getFloat("y");
-    float obstacleH = measures.getFloat("height");
-    float obstacleW = measures.getFloat("width");
-    
-    // Simple AABB collision detection
-    return (x - size/2 < obstacleX + obstacleW/2 &&
-            x + size/2 > obstacleX - obstacleW/2 &&
-            y - size/2 < obstacleY + obstacleH/2 &&
-            y + size/2 > obstacleY - obstacleH/2);
-  }
-
-  private boolean isCollidingWithSphere(JSONObject sphere) {
-    JSONObject center = sphere.getJSONObject("center");
-    float radius = sphere.getFloat("radius");
-    
-    float obstacleX = center.getFloat("x");
-    float obstacleY = center.getFloat("y");
-    
-    float distance = dist(x, y, obstacleX, obstacleY);
-    return distance < (size/2 + radius);
-  }
-
-  private boolean isCollidingWithTriangle(JSONObject triangle) {
-    // Simplified collision - check if tank center is close to any triangle vertex
-    JSONArray vertices = triangle.getJSONArray("vertices");
-    
-    if (vertices.size() >= 3) {
-      for (int i = 0; i < 3; i++) {
-        JSONObject vertex = vertices.getJSONObject(i);
-        float vx = vertex.getFloat("x");
-        float vy = vertex.getFloat("y");
-        
-        if (dist(x, y, vx, vy) < size/2 + 10) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
   public void moveForward() {
     float dx = cos(radians(orientation)) * speed;
     float dy = sin(radians(orientation)) * speed;
@@ -628,7 +589,8 @@ class Player {
     // Check collision with obstacles
     if (currentObstacles != null) {
       for (int i = 0; i < currentObstacles.size(); i++) {
-        if (isCollidingWithObstacle(currentObstacles.getJSONObject(i))) {
+        Obstacle obstacle = currentObstacles.get(i);
+        if (obstacle.isCollidingWith(this)) {
           return true;
         }
       }
@@ -650,4 +612,128 @@ class Player {
   public float getY() { return y; }
   public float getSize() { return size; }
   public float getOrientation() { return orientation; }
+}
+
+// Base Obstacle class
+abstract class Obstacle {
+  protected String kind;
+  protected color fillColor;
+  protected color strokeColor;
+  protected float strokeWeight;
+  
+  public Obstacle(String kind) {
+    this.kind = kind;
+    this.strokeWeight = 2;
+  }
+  
+  public void setStyle(color fillColor, color strokeColor) {
+    this.fillColor = fillColor;
+    this.strokeColor = strokeColor;
+  }
+  
+  public abstract void display();
+  public abstract boolean isCollidingWith(Player player);
+  public abstract boolean isCollidingWith(float x, float y, float size);
+  
+  public String getKind() {
+    return kind;
+  }
+}
+
+// Rectangle Obstacle
+class RectangleObstacle extends Obstacle {
+  private float x, y;
+  private float width, height;
+  
+  public RectangleObstacle(float x, float y, float width, float height) {
+    super("rectangle");
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+  }
+  
+  public void display() {
+    fill(fillColor);
+    stroke(strokeColor);
+    strokeWeight(this.strokeWeight);
+    rectMode(CENTER);
+    rect(x, y, width, height);
+  }
+  
+  public boolean isCollidingWith(Player player) {
+    return isCollidingWith(player.getX(), player.getY(), player.getSize());
+  }
+  
+  public boolean isCollidingWith(float px, float py, float playerSize) {
+    // AABB collision detection
+    return (px - playerSize/2 < x + width/2 &&
+            px + playerSize/2 > x - width/2 &&
+            py - playerSize/2 < y + height/2 &&
+            py + playerSize/2 > y - height/2);
+  }
+}
+
+// Sphere Obstacle
+class SphereObstacle extends Obstacle {
+  private float x, y;
+  private float radius;
+  
+  public SphereObstacle(float x, float y, float radius) {
+    super("sphere");
+    this.x = x;
+    this.y = y;
+    this.radius = radius;
+  }
+  
+  public void display() {
+    fill(fillColor);
+    stroke(strokeColor);
+    strokeWeight(this.strokeWeight);
+    ellipse(x, y, radius * 2, radius * 2);
+  }
+  
+  public boolean isCollidingWith(Player player) {
+    return isCollidingWith(player.getX(), player.getY(), player.getSize());
+  }
+  
+  public boolean isCollidingWith(float px, float py, float playerSize) {
+    float distance = dist(px, py, x, y);
+    return distance < (playerSize/2 + radius);
+  }
+}
+
+// Triangle Obstacle
+class TriangleObstacle extends Obstacle {
+  private float x1, y1, x2, y2, x3, y3;
+  
+  public TriangleObstacle(float x1, float y1, float x2, float y2, float x3, float y3) {
+    super("triangle");
+    this.x1 = x1;
+    this.y1 = y1;
+    this.x2 = x2;
+    this.y2 = y2;
+    this.x3 = x3;
+    this.y3 = y3;
+  }
+  
+  public void display() {
+    fill(fillColor);
+    stroke(strokeColor);
+    strokeWeight(this.strokeWeight);
+    triangle(x1, y1, x2, y2, x3, y3);
+  }
+
+  public boolean isCollidingWith(Player player) {
+    return isCollidingWith(player.getX(), player.getY(), player.getSize());
+  }
+
+  public boolean isCollidingWith(float px, float py, float playerSize) {
+    // Simplified collision - check distance to each vertex
+    float minDistance = min(
+      dist(px, py, x1, y1),
+      min(dist(px, py, x2, y2), dist(px, py, x3, y3))
+    );
+    return minDistance < playerSize/2 + 10;
+  }
 }
