@@ -44,28 +44,28 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
   // Key state tracking
   private boolean[] keys = new boolean[256];
   private boolean[] keyCodes = new boolean[256];
-  
+
   // Map and game state
   private JSONObject[] mapData = new JSONObject[3];
   private ArrayList<Obstacle> currentObstacles;
   private ArrayList<Bullet> bullets;
   private int currentMap = 0;
   private boolean mapsLoaded = false;
-  
+
   private String[] mapFiles = {"map1_crossroads.json", "map2_fortress.json", "map3_maze.json"};
   private String[] mapNames = new String[3];
   private String[] mapDescriptions = new String[3];
-  
+
   private String mapFileBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
-  
+
   // Player instances
   private Player player1, player2;
-  
+
   public Game() {
     // Constructor - initialize collections
     bullets = new ArrayList<Bullet>();
   }
-  
+
   public void initialize() {
     // Load all maps from files
     loadAllMaps();
@@ -86,7 +86,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
       }
     }
   }
-  
+
   public void update() {
     if (!mapsLoaded) return;
     
@@ -96,7 +96,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
     // Handle movement keys
     handleMovementKeys();
   }
-  
+
   public void render() {
     background(20, 20, 20);
     
@@ -123,7 +123,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
     // Display UI
     drawUI();
   }
-  
+
   private void loadAllMaps() {
     println("Loading maps from files...");
     
@@ -150,7 +150,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
     mapsLoaded = true;
     println("All maps loaded successfully!");
   }
-  
+
   private void loadMap(int mapIndex) {
     if (!mapsLoaded || mapIndex < 0 || mapIndex >= mapData.length) {
       return;
@@ -208,7 +208,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
       println("Error loading map " + mapIndex + ": " + e.getMessage());
     }
   }
-  
+
   private void renderObstacles() {
     if (currentObstacles == null) return;
     
@@ -225,7 +225,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
       obstacle.display();
     }
   }
-  
+
   private void setObstacleStyle(int mapIndex) {
     strokeWeight(2);
     
@@ -244,7 +244,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
         break;
     }
   }
-  
+
   private void createPlayersFromJSON(JSONArray players) {
     if (players == null || players.size() < 2) {
       println("Error: Not enough player data in JSON");
@@ -277,7 +277,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
       p2Data.getFloat("orientation")
     );
   }
-  
+
   private void renderPlayers() {
     if (player1 != null) {
       player1.display();
@@ -286,7 +286,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
       player2.display();
     }
   }
-  
+
   private void drawUI() {
     // Map selection UI
     fill(255, 255, 0);
@@ -317,7 +317,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
     text(mapDescriptions[currentMap], width/2, height-45);
     text("Choose your battlefield! Each map offers different tactical challenges.", width/2, height-30);
   }
-  
+
   private void drawErrorScreen() {
     fill(255, 100, 100);
     textAlign(CENTER);
@@ -339,7 +339,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
     fill(150, 150, 150);
     text("Press 'R' to retry loading maps", width/2, height/2 + 100);
   }
-  
+
   public void handleKeyPressed() {
     // Handle regular keys
     if (key >= 0 && key < 256) {
@@ -354,7 +354,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
     // Non-movement keys that should only trigger once
     handleSinglePressKeys();
   }
-  
+
   public void handleKeyReleased() {
     // Handle regular keys
     if (key >= 0 && key < 256) {
@@ -366,7 +366,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
       keyCodes[keyCode] = false;
     }
   }
-  
+
   // Handle keys that should only trigger once per press
   private void handleSinglePressKeys() {
     if (!mapsLoaded) {
@@ -429,7 +429,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
       }
     }
   }
-  
+
   // Call this in your main update loop to handle continuous movement
   private void handleMovementKeys() {
     if (!mapsLoaded) return;
@@ -466,7 +466,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
       }
     }
   }
-  
+
   // Helper functions to check key states
   public boolean isKeyPressed(char k) {
     return keys[k];
@@ -475,35 +475,35 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
   public boolean isKeyCodePressed(int code) {
     return keyCodes[code];
   }
-  
+
   // Bullet management functions
   private void updateBullets() {
     for (int i = bullets.size() - 1; i >= 0; i--) {
       Bullet bullet = bullets.get(i);
       bullet.update();
-      
+
       // Remove bullet if it's out of bounds or hit something
       if (bullet.shouldRemove()) {
         bullets.remove(i);
       }
     }
   }
-  
+
   private void renderBullets() {
     for (Bullet bullet : bullets) {
       bullet.display();
     }
   }
-  
+
   public void createBullet(float x, float y, float angle, int playerId) {
     bullets.add(new Bullet(this, this, x, y, angle, playerId));
   }
-  
+
   // Getters for game state (used by Player and Bullet classes)
   public ArrayList<Obstacle> getCurrentObstacles() {
     return currentObstacles;
   }
-  
+
   public Player getPlayerByID(int id) {
     if (id == 1) {
       return player1;
@@ -511,14 +511,6 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
       return player2;
     }
     return null;
-  }
-  
-  public Player getPlayer1() {
-    return player1;
-  }
-  
-  public Player getPlayer2() {
-    return player2;
   }
 }
 
@@ -533,7 +525,7 @@ class Bullet {
   private boolean shouldRemove = false;
   private float size = 6; // Small square bullet
   private SphereCollider collider; // Use sphere collider for bullets
-  
+
   public Bullet(ObstacleProvider obstacleProvider, PlayerProvider playerProvider, float startX, float startY, float angle, int playerId) {
     this.obstacleProvider = obstacleProvider;
     this.playerProvider = playerProvider;
@@ -543,7 +535,7 @@ class Bullet {
     this.playerId = playerId;
     this.collider = new SphereCollider(x, y, size/2); // Radius is half the size
   }
-  
+
   public void update() {
     // Move bullet
     x += cos(radians(angle)) * speed;
@@ -589,7 +581,7 @@ class Bullet {
       }
     }
   }
-  
+
   public void display() {
     // Set bullet color based on which player fired it
     if (playerId == 1) {
@@ -610,11 +602,11 @@ class Bullet {
     rect(0, 0, size, size);
     popMatrix();
   }
-  
+
   public boolean shouldRemove() {
     return shouldRemove;
   }
-  
+
   public SphereCollider getCollider() {
     return collider;
   }
@@ -835,16 +827,16 @@ class Player {
 // Base Collider class - handles collision detection logic
 abstract class Collider {
   protected String type;
-  
+
   public Collider(String type) {
     this.type = type;
   }
-  
+
   public abstract boolean isCollidingWith(float x, float y, float size);
   public abstract boolean isCollidingWith(Player player);
   public abstract boolean isCollidingWith(Collider other);
   public abstract void updatePosition(float... params);
-  
+
   public String getType() {
     return type;
   }
@@ -853,7 +845,7 @@ abstract class Collider {
 // Rectangle Collider
 class RectangleCollider extends Collider {
   private float x, y, width, height;
-  
+
   public RectangleCollider(float x, float y, float width, float height) {
     super("rectangle");
     this.x = x;
@@ -869,13 +861,13 @@ class RectangleCollider extends Collider {
       this.y = params[1];
     }
   }
-  
+
   // Update size - useful for dynamic obstacles
   public void updateSize(float newWidth, float newHeight) {
     this.width = newWidth;
     this.height = newHeight;
   }
-  
+
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
@@ -886,7 +878,7 @@ class RectangleCollider extends Collider {
             py - playerSize/2 < y + height/2 &&
             py + playerSize/2 > y - height/2);
   }
-  
+
   public boolean isCollidingWith(Collider other) {
     if (other instanceof RectangleCollider) {
       RectangleCollider rect = (RectangleCollider) other;
@@ -904,7 +896,7 @@ class RectangleCollider extends Collider {
     }
     return false;
   }
-  
+
   // Getters for position and size
   public float getX() { return x; }
   public float getY() { return y; }
@@ -915,14 +907,14 @@ class RectangleCollider extends Collider {
 // Sphere Collider
 class SphereCollider extends Collider {
   private float x, y, radius;
-  
+
   public SphereCollider(float x, float y, float radius) {
     super("sphere");
     this.x = x;
     this.y = y;
     this.radius = radius;
   }
-  
+
   // Update position - params: newX, newY
   public void updatePosition(float... params) {
     if (params.length >= 2) {
@@ -930,21 +922,21 @@ class SphereCollider extends Collider {
       this.y = params[1];
     }
   }
-  
+
   // Update radius - useful for dynamic obstacles
   public void updateRadius(float newRadius) {
     this.radius = newRadius;
   }
-  
+
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
-  
+
   public boolean isCollidingWith(float px, float py, float playerSize) {
     float distance = dist(px, py, x, y);
     return distance < (playerSize/2 + radius);
   }
-  
+
   public boolean isCollidingWith(Collider other) {
     if (other instanceof SphereCollider) {
       SphereCollider sphere = (SphereCollider) other;
@@ -960,7 +952,7 @@ class SphereCollider extends Collider {
     }
     return false;
   }
-  
+
   // Getters for position and radius
   public float getX() { return x; }
   public float getY() { return y; }
@@ -970,7 +962,7 @@ class SphereCollider extends Collider {
 // Triangle Collider
 class TriangleCollider extends Collider {
   private float x1, y1, x2, y2, x3, y3;
-  
+
   public TriangleCollider(float x1, float y1, float x2, float y2, float x3, float y3) {
     super("triangle");
     this.x1 = x1;
@@ -980,7 +972,7 @@ class TriangleCollider extends Collider {
     this.x3 = x3;
     this.y3 = y3;
   }
-  
+
   // Update position - params: x1, y1, x2, y2, x3, y3
   public void updatePosition(float... params) {
     if (params.length >= 6) {
@@ -992,11 +984,11 @@ class TriangleCollider extends Collider {
       this.y3 = params[5];
     }
   }
-  
+
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
-  
+
   public boolean isCollidingWith(float px, float py, float playerSize) {
     float playerRadius = playerSize / 2;
     
@@ -1014,7 +1006,7 @@ class TriangleCollider extends Collider {
     
     return minDistanceToEdge <= playerRadius;
   }
-  
+
   public boolean isCollidingWith(Collider other) {
     if (other instanceof SphereCollider) {
       SphereCollider sphere = (SphereCollider) other;
@@ -1026,7 +1018,7 @@ class TriangleCollider extends Collider {
     }
     return false;
   }
-  
+
   // Check if a point is inside the triangle using barycentric coordinates
   private boolean isPointInTriangle(float px, float py) {
     float denom = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
@@ -1038,7 +1030,7 @@ class TriangleCollider extends Collider {
     
     return a >= 0 && b >= 0 && c >= 0;
   }
-  
+
   // Calculate distance from point to line segment
   private float distancePointToLineSegment(float px, float py, float x1, float y1, float x2, float y2) {
     float dx = x2 - x1;
@@ -1055,14 +1047,14 @@ class TriangleCollider extends Collider {
     
     // Clamp t to [0, 1] to stay within line segment
     t = constrain(t, 0, 1);
-    
+
     // Find closest point on line segment
     float closestX = x1 + t * dx;
     float closestY = y1 + t * dy;
-    
+
     return dist(px, py, closestX, closestY);
   }
-  
+
   // Getters for vertices
   public float getX1() { return x1; }
   public float getY1() { return y1; }
@@ -1079,28 +1071,28 @@ abstract class Obstacle {
   protected color strokeColor;
   protected float strokeWeight;
   protected Collider collider;
-  
+
   public Obstacle(String kind, Collider collider) {
     this.kind = kind;
     this.collider = collider;
     this.strokeWeight = 2;
   }
-  
+
   public void setStyle(color fillColor, color strokeColor) {
     this.fillColor = fillColor;
     this.strokeColor = strokeColor;
   }
-  
+
   public abstract void display();
-  
+
   public boolean isCollidingWith(Player player) {
     return collider.isCollidingWith(player);
   }
-  
+
   public boolean isCollidingWith(float x, float y, float size) {
     return collider.isCollidingWith(x, y, size);
   }
-  
+
   public String getKind() {
     return kind;
   }
@@ -1110,7 +1102,7 @@ abstract class Obstacle {
 class RectangleObstacle extends Obstacle {
   private float x, y;
   private float width, height;
-  
+
   public RectangleObstacle(float x, float y, float width, float height) {
     super("rectangle", new RectangleCollider(x, y, width, height));
     this.x = x;
@@ -1118,7 +1110,7 @@ class RectangleObstacle extends Obstacle {
     this.width = width;
     this.height = height;
   }
-  
+
   public void display() {
     fill(fillColor);
     stroke(strokeColor);
@@ -1132,14 +1124,14 @@ class RectangleObstacle extends Obstacle {
 class SphereObstacle extends Obstacle {
   private float x, y;
   private float radius;
-  
+
   public SphereObstacle(float x, float y, float radius) {
     super("sphere", new SphereCollider(x, y, radius));
     this.x = x;
     this.y = y;
     this.radius = radius;
   }
-  
+
   public void display() {
     fill(fillColor);
     stroke(strokeColor);
@@ -1151,7 +1143,7 @@ class SphereObstacle extends Obstacle {
 // Triangle Obstacle - simplified, uses TriangleCollider
 class TriangleObstacle extends Obstacle {
   private float x1, y1, x2, y2, x3, y3;
-  
+
   public TriangleObstacle(float x1, float y1, float x2, float y2, float x3, float y3) {
     super("triangle", new TriangleCollider(x1, y1, x2, y2, x3, y3));
     this.x1 = x1;
@@ -1161,7 +1153,7 @@ class TriangleObstacle extends Obstacle {
     this.x3 = x3;
     this.y3 = y3;
   }
-  
+
   public void display() {
     fill(fillColor);
     stroke(strokeColor);
