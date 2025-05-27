@@ -39,8 +39,12 @@ interface PlayerProvider {
   Player getPlayerByID(int id);
 }
 
+interface ScoreIncreaser {
+  void increaseScore(int playerId);
+}
+
 // Main Game class - contains all game state and logic
-class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
+class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncreaser {
   // Key state tracking
   private boolean[] keys = new boolean[256];
   private boolean[] keyCodes = new boolean[256];
@@ -51,6 +55,8 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
   private ArrayList<Bullet> bullets;
   private int currentMap = 0;
   private boolean mapsLoaded = false;
+
+  private int[] scores = {0, 0}; // Player scores
 
   private String[] mapFiles = {"map1_crossroads.json", "map2_fortress.json", "map3_maze.json"};
   private String[] mapNames = new String[3];
@@ -104,13 +110,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
       drawErrorScreen();
       return;
     }
-    
-    // Draw arena border
-    stroke(255, 255, 0);
-    strokeWeight(4);
-    noFill();
-    rect(20, 20, width-40, height-40);
-    
+
     // Render current map obstacles
     renderObstacles();
     
@@ -293,11 +293,19 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
     textAlign(LEFT);
     textSize(16);
     text("COMBAT ARENA", 30, 50);
-    
     textSize(12);
     text("Current Map: " + mapNames[currentMap], 30, 70);
     text("Press 1-3 to switch maps", 30, 85);
-    
+
+    // Scores
+    fill(255);
+    textAlign(CENTER);
+    textSize(18);
+    text("Scores", width/2, 30);
+    textSize(14);
+    text("Player 1: " + scores[0], width/2 - 50, 50);
+    text("Player 2: " + scores[1], width/2 + 50, 50);
+
     // Map list
     textAlign(RIGHT);
     for (int i = 0; i < mapNames.length; i++) {
@@ -309,13 +317,6 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
         text((i+1) + ". " + mapNames[i], width-30, 50 + i*15);
       }
     }
-    
-    // Map description
-    fill(200, 200, 200);
-    textAlign(CENTER);
-    textSize(10);
-    text(mapDescriptions[currentMap], width/2, height-45);
-    text("Choose your battlefield! Each map offers different tactical challenges.", width/2, height-30);
   }
 
   private void drawErrorScreen() {
@@ -496,7 +497,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
   }
 
   public void createBullet(float x, float y, float angle, int playerId) {
-    bullets.add(new Bullet(this, this, x, y, angle, playerId));
+    bullets.add(new Bullet(this, this, this, x, y, angle, playerId));
   }
 
   // Getters for game state (used by Player and Bullet classes)
@@ -512,12 +513,22 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider {
     }
     return null;
   }
+
+  public void increaseScore(int playerId) {
+    if (playerId == 1) {
+      scores[0]++;
+    } else if (playerId == 2) {
+      scores[1]++;
+    }
+    println("Player " + playerId + " scored! New score: " + scores[playerId - 1]);
+  }
 }
 
 // Bullet class - now takes Game reference
 class Bullet {
   private ObstacleProvider obstacleProvider;
   private PlayerProvider playerProvider;
+  private ScoreIncreaser scoreIncreaser;
   private float x, y;
   private float angle;
   private float speed = 4.0; // Slightly faster than player speed
@@ -526,9 +537,10 @@ class Bullet {
   private float size = 6; // Small square bullet
   private SphereCollider collider; // Use sphere collider for bullets
 
-  public Bullet(ObstacleProvider obstacleProvider, PlayerProvider playerProvider, float startX, float startY, float angle, int playerId) {
+  public Bullet(ObstacleProvider obstacleProvider, PlayerProvider playerProvider, ScoreIncreaser scoreIncreaser, float startX, float startY, float angle, int playerId) {
     this.obstacleProvider = obstacleProvider;
     this.playerProvider = playerProvider;
+    this.scoreIncreaser = scoreIncreaser;
     this.x = startX;
     this.y = startY;
     this.angle = angle;
@@ -556,6 +568,7 @@ class Bullet {
     
     if (player1 != null && playerId != 1) {
       if (collider.isCollidingWith(player1.getCollider())) {
+        scoreIncreaser.increaseScore(2); // Player 2 scores
         println("Player 1 hit by Player " + playerId + "'s bullet!");
         shouldRemove = true;
         return;
@@ -564,6 +577,7 @@ class Bullet {
     
     if (player2 != null && playerId != 2) {
       if (collider.isCollidingWith(player2.getCollider())) {
+        scoreIncreaser.increaseScore(1); // Player 1 scores
         println("Player 2 hit by Player " + playerId + "'s bullet!");
         shouldRemove = true;
         return;
