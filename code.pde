@@ -646,10 +646,14 @@ class Bullet {
   private float x, y;
   private float angle;
   private float speed = 4.0; // Slightly faster than player speed
+  private LocalDateTime bulletCreationTime;
+  private final int maxBulletLifetime = 5; // Maximum lifetime in seconds
   private int playerId;
   private boolean shouldRemove = false;
   private float size = 6; // Small square bullet
   private SphereCollider collider; // Use sphere collider for bullets
+  private int bounces = 0; // Track number of bounces
+  private final int maxBounces = 4; // Maximum number of bounces allowed
 
   public Bullet(ObstacleProvider obstacleProvider, PlayerProvider playerProvider, ScoreIncreaser scoreIncreaser, PlayerHitListener playerHitListener, float startX, float startY, float angle, int playerId) {
     this.obstacleProvider = obstacleProvider;
@@ -661,21 +665,90 @@ class Bullet {
     this.angle = angle;
     this.playerId = playerId;
     this.collider = new SphereCollider(x, y, size/2); // Radius is half the size
+    this.bulletCreationTime = LocalDateTime.now();
   }
 
   public void update() {
-    // Move bullet
-    x += cos(radians(angle)) * speed;
-    y += sin(radians(angle)) * speed;
-    
-    // Update collider position
-    collider.updatePosition(x, y);
-    
-    // Check bounds
-    if (x < 20 || x > width - 20 || y < 20 || y > height - 20) {
+    LocalDateTime now = LocalDateTime.now();
+    if (bulletCreationTime != null) {
+      // Check if bullet has exceeded its lifetime
+      long secondsSinceCreation = java.time.Duration.between(bulletCreationTime, now).getSeconds();
+      if (secondsSinceCreation > maxBulletLifetime) {
       shouldRemove = true;
       return;
+      }
     }
+    // Calculate next position
+    float nextX = x + cos(radians(angle)) * speed;
+    float nextY = y + sin(radians(angle)) * speed;
+    
+    // Check bounds and handle bouncing
+    boolean bounced = false;
+    
+    // Check horizontal bounds (left/right walls)
+    if (nextX < 20 || nextX > width - 20) {
+      if (bounces < maxBounces) {
+        angle = 180 - angle; // Reflect horizontally
+        bounces++;
+        bounced = true;
+        // Ensure bullet stays within bounds
+        nextX = constrain(nextX, 20, width - 20);
+      } else {
+        shouldRemove = true;
+        return;
+      }
+    }
+    
+    // Check vertical bounds (top/bottom walls)
+    if (nextY < 20 || nextY > height - 20) {
+      if (bounces < maxBounces) {
+        angle = -angle; // Reflect vertically
+        bounces++;
+        bounced = true;
+        // Ensure bullet stays within bounds
+        nextY = constrain(nextY, 20, height - 20);
+      } else {
+        shouldRemove = true;
+        return;
+      }
+    }
+    
+    // If we bounced off walls, update position and collider, then continue
+    if (bounced) {
+      x = nextX;
+      y = nextY;
+      collider.updatePosition(x, y);
+      return; // Skip obstacle collision check this frame to avoid getting stuck
+    }
+    
+    // Check collision with obstacles and handle bouncing
+    ArrayList<Obstacle> currentObstacles = obstacleProvider.getCurrentObstacles();
+    if (currentObstacles != null) {
+      for (Obstacle obstacle : currentObstacles) {
+        if (obstacle.isCollidingWith(nextX, nextY, size)) {
+          if (bounces < maxBounces) {
+            // Calculate bounce angle based on obstacle type
+            float bounceAngle = calculateBounceAngle(obstacle, nextX, nextY);
+            angle = bounceAngle;
+            bounces++;
+            
+            // Move bullet slightly away from obstacle to prevent getting stuck
+            x += cos(radians(angle)) * 2;
+            y += sin(radians(angle)) * 2;
+            collider.updatePosition(x, y);
+            return; // Skip movement this frame
+          } else {
+            shouldRemove = true;
+            return;
+          }
+        }
+      }
+    }
+    
+    // Move bullet normally if no collision
+    x = nextX;
+    y = nextY;
+    collider.updatePosition(x, y);
     
     // Check collision with players using colliders
     Player player1 = playerProvider.getPlayerByID(1);
@@ -698,26 +771,149 @@ class Bullet {
         return;
       }
     }
+  }
+  
+  // Calculate bounce angle based on obstacle type and collision point
+  private float calculateBounceAngle(Obstacle obstacle, float bulletX, float bulletY) {
+    String obstacleType = obstacle.getKind();
     
-    // Check collision with obstacles using colliders
-    ArrayList<Obstacle> currentObstacles = obstacleProvider.getCurrentObstacles();
-    if (currentObstacles != null) {
-      for (Obstacle obstacle : currentObstacles) {
-        if (obstacle.isCollidingWith(x, y, size)) {
-          shouldRemove = true;
-          return;
-        }
-      }
+    if (obstacleType.equals("rectangle")) {
+      RectangleObstacle rect = (RectangleObstacle) obstacle;
+      return calculateRectangleBounce(rect, bulletX, bulletY);
+    } else if (obstacleType.equals("sphere")) {
+      SphereObstacle sphere = (SphereObstacle) obstacle;
+      return calculateSphereBounce(sphere, bulletX, bulletY);
+    } else if (obstacleType.equals("triangle")) {
+      TriangleObstacle triangle = (TriangleObstacle) obstacle;
+      return calculateTriangleBounce(triangle, bulletX, bulletY);
     }
+    
+    // Default: reverse direction
+    return angle + 180;
+  }
+  
+  private float calculateRectangleBounce(RectangleObstacle rect, float bulletX, float bulletY) {
+    // Get rectangle collider for position and size
+    RectangleCollider rectCollider = (RectangleCollider) rect.collider;
+    float rectX = rectCollider.getX();
+    float rectY = rectCollider.getY();
+    float rectWidth = rectCollider.getWidth();
+    float rectHeight = rectCollider.getHeight();
+    
+    // Determine which side of rectangle was hit
+    float left = rectX - rectWidth/2;
+    float right = rectX + rectWidth/2;
+    float top = rectY - rectHeight/2;
+    float bottom = rectY + rectHeight/2;
+    
+    // Calculate distances to each edge
+    float distToLeft = abs(bulletX - left);
+    float distToRight = abs(bulletX - right);
+    float distToTop = abs(bulletY - top);
+    float distToBottom = abs(bulletY - bottom);
+    
+    float minDist = min(min(distToLeft, distToRight), min(distToTop, distToBottom));
+    
+    // Reflect based on closest edge
+    if (minDist == distToLeft || minDist == distToRight) {
+      // Hit left or right edge - reflect horizontally
+      return 180 - angle;
+    } else {
+      // Hit top or bottom edge - reflect vertically
+      return -angle;
+    }
+  }
+  
+  private float calculateSphereBounce(SphereObstacle sphere, float bulletX, float bulletY) {
+    // Get sphere collider for position
+    SphereCollider sphereCollider = (SphereCollider) sphere.collider;
+    float sphereX = sphereCollider.getX();
+    float sphereY = sphereCollider.getY();
+    
+    // Calculate normal vector from sphere center to bullet
+    float normalX = bulletX - sphereX;
+    float normalY = bulletY - sphereY;
+    
+    // Normalize the normal vector
+    float normalLength = sqrt(normalX * normalX + normalY * normalY);
+    if (normalLength > 0) {
+      normalX /= normalLength;
+      normalY /= normalLength;
+    }
+    
+    // Convert current angle to velocity vector
+    float vx = cos(radians(angle));
+    float vy = sin(radians(angle));
+    
+    // Reflect velocity using normal: v' = v - 2(v·n)n
+    float dotProduct = vx * normalX + vy * normalY;
+    float reflectedVx = vx - 2 * dotProduct * normalX;
+    float reflectedVy = vy - 2 * dotProduct * normalY;
+    
+    // Convert back to angle
+    return degrees(atan2(reflectedVy, reflectedVx));
+  }
+  
+  private float calculateTriangleBounce(TriangleObstacle triangle, float bulletX, float bulletY) {
+    // For simplicity with triangles, find the closest edge and reflect off it
+    TriangleCollider triCollider = (TriangleCollider) triangle.collider;
+    
+    // Calculate distances to each edge
+    float dist1 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX1(), triCollider.getY1(), triCollider.getX2(), triCollider.getY2());
+    float dist2 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX2(), triCollider.getY2(), triCollider.getX3(), triCollider.getY3());
+    float dist3 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX3(), triCollider.getY3(), triCollider.getX1(), triCollider.getY1());
+    
+    // Find closest edge and calculate normal
+    float edgeAngle;
+    if (dist1 <= dist2 && dist1 <= dist3) {
+      // Closest to edge 1-2
+      edgeAngle = atan2(triCollider.getY2() - triCollider.getY1(), triCollider.getX2() - triCollider.getX1());
+    } else if (dist2 <= dist3) {
+      // Closest to edge 2-3
+      edgeAngle = atan2(triCollider.getY3() - triCollider.getY2(), triCollider.getX3() - triCollider.getX2());
+    } else {
+      // Closest to edge 3-1
+      edgeAngle = atan2(triCollider.getY1() - triCollider.getY3(), triCollider.getX1() - triCollider.getX3());
+    }
+    
+    // Calculate reflection angle
+    float normalAngle = edgeAngle + 90; // Normal is perpendicular to edge
+    float incidentAngle = angle - normalAngle;
+    return normalAngle - incidentAngle;
+  }
+  
+  // Helper method for triangle bounce calculation
+  private float distancePointToLineSegment(float px, float py, float x1, float y1, float x2, float y2) {
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    float lengthSquared = dx * dx + dy * dy;
+    
+    if (lengthSquared == 0) {
+      return dist(px, py, x1, y1);
+    }
+    
+    float t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
+    t = constrain(t, 0, 1);
+    
+    float closestX = x1 + t * dx;
+    float closestY = y1 + t * dy;
+    
+    return dist(px, py, closestX, closestY);
   }
 
   public void display() {
     // Set bullet color based on which player fired it
+    // Dim the color based on number of bounces for visual feedback
+    float bouceColorIntensity = map(bounces, 0, maxBounces, 255, 100);
+    float timeColorIntensity = map(java.time.Duration.between(bulletCreationTime, LocalDateTime.now()).getSeconds(), 0, maxBulletLifetime, 255, 100);
+    
+    float colorIntensity = min(bouceColorIntensity, timeColorIntensity);
+    
     if (playerId == 1) {
-      fill(255, 200, 200); // Light red for Player 1
+      fill(colorIntensity, colorIntensity * 0.8, colorIntensity * 0.8); // Dimming red for Player 1
       stroke(255, 100, 100);
     } else {
-      fill(200, 200, 255); // Light blue for Player 2
+      fill(colorIntensity * 0.8, colorIntensity * 0.8, colorIntensity); // Dimming blue for Player 2
       stroke(100, 100, 255);
     }
     
@@ -730,6 +926,14 @@ class Bullet {
     rotate(radians(angle + 45)); // Rotate 45 degrees for diamond shape
     rect(0, 0, size, size);
     popMatrix();
+    
+    // Draw bounce count indicator (small text above bullet)
+    if (bounces > 0) {
+      fill(255, 255, 0);
+      textAlign(CENTER);
+      textSize(8);
+      text(bounces, x, y - 10);
+    }
   }
 
   public boolean shouldRemove() {
