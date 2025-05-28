@@ -233,18 +233,6 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
             center.getFloat("y"),
             obj.getFloat("radius")
           ));
-        } else if (kind.equals("triangle")) {
-          JSONArray vertices = obj.getJSONArray("vertices");
-          if (vertices.size() >= 3) {
-            JSONObject v1 = vertices.getJSONObject(0);
-            JSONObject v2 = vertices.getJSONObject(1);
-            JSONObject v3 = vertices.getJSONObject(2);
-            currentObstacles.add(new TriangleObstacle(
-              v1.getFloat("x"), v1.getFloat("y"),
-              v2.getFloat("x"), v2.getFloat("y"),
-              v3.getFloat("x"), v3.getFloat("y")
-            ));
-          }
         }
       }
       JSONArray currentPlayers = mapData[mapIndex].getJSONArray("players");
@@ -807,9 +795,6 @@ class Bullet {
     } else if (obstacleType.equals("sphere")) {
       SphereObstacle sphere = (SphereObstacle) obstacle;
       return calculateSphereBounce(sphere, bulletX, bulletY);
-    } else if (obstacleType.equals("triangle")) {
-      TriangleObstacle triangle = (TriangleObstacle) obstacle;
-      return calculateTriangleBounce(triangle, bulletX, bulletY);
     }
     
     // Default: reverse direction
@@ -876,53 +861,6 @@ class Bullet {
     
     // Convert back to angle
     return degrees(atan2(reflectedVy, reflectedVx));
-  }
-  
-  private float calculateTriangleBounce(TriangleObstacle triangle, float bulletX, float bulletY) {
-    // For simplicity with triangles, find the closest edge and reflect off it
-    TriangleCollider triCollider = (TriangleCollider) triangle.collider;
-    
-    // Calculate distances to each edge
-    float dist1 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX1(), triCollider.getY1(), triCollider.getX2(), triCollider.getY2());
-    float dist2 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX2(), triCollider.getY2(), triCollider.getX3(), triCollider.getY3());
-    float dist3 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX3(), triCollider.getY3(), triCollider.getX1(), triCollider.getY1());
-    
-    // Find closest edge and calculate normal
-    float edgeAngle;
-    if (dist1 <= dist2 && dist1 <= dist3) {
-      // Closest to edge 1-2
-      edgeAngle = atan2(triCollider.getY2() - triCollider.getY1(), triCollider.getX2() - triCollider.getX1());
-    } else if (dist2 <= dist3) {
-      // Closest to edge 2-3
-      edgeAngle = atan2(triCollider.getY3() - triCollider.getY2(), triCollider.getX3() - triCollider.getX2());
-    } else {
-      // Closest to edge 3-1
-      edgeAngle = atan2(triCollider.getY1() - triCollider.getY3(), triCollider.getX1() - triCollider.getX3());
-    }
-    
-    // Calculate reflection angle
-    float normalAngle = edgeAngle + 90; // Normal is perpendicular to edge
-    float incidentAngle = angle - normalAngle;
-    return normalAngle - incidentAngle;
-  }
-  
-  // Helper method for triangle bounce calculation
-  private float distancePointToLineSegment(float px, float py, float x1, float y1, float x2, float y2) {
-    float dx = x2 - x1;
-    float dy = y2 - y1;
-    float lengthSquared = dx * dx + dy * dy;
-    
-    if (lengthSquared == 0) {
-      return dist(px, py, x1, y1);
-    }
-    
-    float t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
-    t = constrain(t, 0, 1);
-    
-    float closestX = x1 + t * dx;
-    float closestY = y1 + t * dy;
-    
-    return dist(px, py, closestX, closestY);
   }
 
   public void display() {
@@ -1206,37 +1144,30 @@ class Player {
   }
 }
 
-// Base Collider class - handles collision detection logic
-abstract class Collider {
-  protected String type;
-
-  public Collider(String type) {
-    this.type = type;
-  }
-
-  public abstract boolean isCollidingWith(float x, float y, float size);
-  public abstract boolean isCollidingWith(Player player);
-  public abstract boolean isCollidingWith(Collider other);
-  public abstract void updatePosition(float... params);
-
-  public String getType() {
-    return type;
-  }
+// Collider interface - defines collision detection contract
+interface Collider {
+  boolean isCollidingWith(Collider other);
+  boolean isCollidingWith(float x, float y, float size);
+  boolean isCollidingWith(Player player);
+  void updatePosition(float... params);
+  String getType();
+  
+  // Visitor pattern methods for type-safe collision detection
+  boolean collidesWith(RectangleCollider rect);
+  boolean collidesWith(SphereCollider sphere);
 }
 
 // Rectangle Collider
-class RectangleCollider extends Collider {
+class RectangleCollider implements Collider {
   private float x, y, width, height;
 
   public RectangleCollider(float x, float y, float width, float height) {
-    super("rectangle");
     this.x = x;
     this.y = y;
     this.width = width;
     this.height = height;
   }
 
-  // Update position - params: newX, newY
   public void updatePosition(float... params) {
     if (params.length >= 2) {
       this.x = params[0];
@@ -1244,7 +1175,6 @@ class RectangleCollider extends Collider {
     }
   }
 
-  // Update size - useful for dynamic obstacles
   public void updateSize(float newWidth, float newHeight) {
     this.width = newWidth;
     this.height = newHeight;
@@ -1253,8 +1183,8 @@ class RectangleCollider extends Collider {
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
+
   public boolean isCollidingWith(float px, float py, float playerSize) {
-    // AABB collision detection
     return (px - playerSize/2 < x + width/2 &&
             px + playerSize/2 > x - width/2 &&
             py - playerSize/2 < y + height/2 &&
@@ -1262,24 +1192,25 @@ class RectangleCollider extends Collider {
   }
 
   public boolean isCollidingWith(Collider other) {
-    if (other instanceof RectangleCollider) {
-      RectangleCollider rect = (RectangleCollider) other;
-      return (x - width/2 < rect.x + rect.width/2 &&
-              x + width/2 > rect.x - rect.width/2 &&
-              y - height/2 < rect.y + rect.height/2 &&
-              y + height/2 > rect.y - rect.height/2);
-    } else if (other instanceof SphereCollider) {
-      SphereCollider sphere = (SphereCollider) other;
-      // Rectangle-circle collision
-      float closestX = constrain(sphere.x, x - width/2, x + width/2);
-      float closestY = constrain(sphere.y, y - height/2, y + height/2);
-      float distance = dist(sphere.x, sphere.y, closestX, closestY);
-      return distance <= sphere.radius;
-    }
-    return false;
+    return other.collidesWith(this);
   }
 
-  // Getters for position and size
+  // Visitor pattern implementations
+  public boolean collidesWith(RectangleCollider rect) {
+    return (x - width/2 < rect.x + rect.width/2 &&
+            x + width/2 > rect.x - rect.width/2 &&
+            y - height/2 < rect.y + rect.height/2 &&
+            y + height/2 > rect.y - rect.height/2);
+  }
+
+  public boolean collidesWith(SphereCollider sphere) {
+    float closestX = constrain(sphere.getX(), x - width/2, x + width/2);
+    float closestY = constrain(sphere.getY(), y - height/2, y + height/2);
+    float distance = dist(sphere.getX(), sphere.getY(), closestX, closestY);
+    return distance <= sphere.getRadius();
+  }
+
+  public String getType() { return "rectangle"; }
   public float getX() { return x; }
   public float getY() { return y; }
   public float getWidth() { return width; }
@@ -1287,17 +1218,15 @@ class RectangleCollider extends Collider {
 }
 
 // Sphere Collider
-class SphereCollider extends Collider {
+class SphereCollider implements Collider {
   private float x, y, radius;
 
   public SphereCollider(float x, float y, float radius) {
-    super("sphere");
     this.x = x;
     this.y = y;
     this.radius = radius;
   }
 
-  // Update position - params: newX, newY
   public void updatePosition(float... params) {
     if (params.length >= 2) {
       this.x = params[0];
@@ -1305,7 +1234,6 @@ class SphereCollider extends Collider {
     }
   }
 
-  // Update radius - useful for dynamic obstacles
   public void updateRadius(float newRadius) {
     this.radius = newRadius;
   }
@@ -1320,130 +1248,26 @@ class SphereCollider extends Collider {
   }
 
   public boolean isCollidingWith(Collider other) {
-    if (other instanceof SphereCollider) {
-      SphereCollider sphere = (SphereCollider) other;
-      float distance = dist(x, y, sphere.x, sphere.y);
-      return distance < (radius + sphere.radius);
-    } else if (other instanceof RectangleCollider) {
-      RectangleCollider rect = (RectangleCollider) other;
-      // Circle-rectangle collision
-      float closestX = constrain(x, rect.x - rect.width/2, rect.x + rect.width/2);
-      float closestY = constrain(y, rect.y - rect.height/2, rect.y + rect.height/2);
-      float distance = dist(x, y, closestX, closestY);
-      return distance <= radius;
-    }
-    return false;
+    return other.collidesWith(this);
   }
 
-  // Getters for position and radius
+  // Visitor pattern implementations
+  public boolean collidesWith(RectangleCollider rect) {
+    float closestX = constrain(x, rect.getX() - rect.getWidth()/2, rect.getX() + rect.getWidth()/2);
+    float closestY = constrain(y, rect.getY() - rect.getHeight()/2, rect.getY() + rect.getHeight()/2);
+    float distance = dist(x, y, closestX, closestY);
+    return distance <= radius;
+  }
+
+  public boolean collidesWith(SphereCollider sphere) {
+    float distance = dist(x, y, sphere.x, sphere.y);
+    return distance < (radius + sphere.radius);
+  }
+
+  public String getType() { return "sphere"; }
   public float getX() { return x; }
   public float getY() { return y; }
   public float getRadius() { return radius; }
-}
-
-// Triangle Collider
-class TriangleCollider extends Collider {
-  private float x1, y1, x2, y2, x3, y3;
-
-  public TriangleCollider(float x1, float y1, float x2, float y2, float x3, float y3) {
-    super("triangle");
-    this.x1 = x1;
-    this.y1 = y1;
-    this.x2 = x2;
-    this.y2 = y2;
-    this.x3 = x3;
-    this.y3 = y3;
-  }
-
-  // Update position - params: x1, y1, x2, y2, x3, y3
-  public void updatePosition(float... params) {
-    if (params.length >= 6) {
-      this.x1 = params[0];
-      this.y1 = params[1];
-      this.x2 = params[2];
-      this.y2 = params[3];
-      this.x3 = params[4];
-      this.y3 = params[5];
-    }
-  }
-
-  public boolean isCollidingWith(Player player) {
-    return isCollidingWith(player.getX(), player.getY(), player.getSize());
-  }
-
-  public boolean isCollidingWith(float px, float py, float playerSize) {
-    float playerRadius = playerSize / 2;
-    
-    // First check if player center is inside triangle
-    if (isPointInTriangle(px, py)) {
-      return true;
-    }
-    
-    // Check distance to each edge of the triangle
-    float dist1 = distancePointToLineSegment(px, py, x1, y1, x2, y2);
-    float dist2 = distancePointToLineSegment(px, py, x2, y2, x3, y3);
-    float dist3 = distancePointToLineSegment(px, py, x3, y3, x1, y1);
-    
-    float minDistanceToEdge = min(dist1, min(dist2, dist3));
-    
-    return minDistanceToEdge <= playerRadius;
-  }
-
-  public boolean isCollidingWith(Collider other) {
-    if (other instanceof SphereCollider) {
-      SphereCollider sphere = (SphereCollider) other;
-      return isCollidingWith(sphere.x, sphere.y, sphere.radius * 2);
-    } else if (other instanceof RectangleCollider) {
-      RectangleCollider rect = (RectangleCollider) other;
-      // Check if any corner of rectangle is inside triangle or if triangle intersects rectangle
-      return isCollidingWith(rect.x, rect.y, sqrt(rect.width*rect.width + rect.height*rect.height));
-    }
-    return false;
-  }
-
-  // Check if a point is inside the triangle using barycentric coordinates
-  private boolean isPointInTriangle(float px, float py) {
-    float denom = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
-    if (abs(denom) < 0.001) return false; // Degenerate triangle
-    
-    float a = ((y2 - y3) * (px - x3) + (x3 - x2) * (py - y3)) / denom;
-    float b = ((y3 - y1) * (px - x3) + (x1 - x3) * (py - y3)) / denom;
-    float c = 1 - a - b;
-    
-    return a >= 0 && b >= 0 && c >= 0;
-  }
-
-  // Calculate distance from point to line segment
-  private float distancePointToLineSegment(float px, float py, float x1, float y1, float x2, float y2) {
-    float dx = x2 - x1;
-    float dy = y2 - y1;
-    float lengthSquared = dx * dx + dy * dy;
-    
-    if (lengthSquared == 0) {
-      // Line segment is actually a point
-      return dist(px, py, x1, y1);
-    }
-    
-    // Calculate parameter t for projection of point onto line
-    float t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
-    
-    // Clamp t to [0, 1] to stay within line segment
-    t = constrain(t, 0, 1);
-
-    // Find closest point on line segment
-    float closestX = x1 + t * dx;
-    float closestY = y1 + t * dy;
-
-    return dist(px, py, closestX, closestY);
-  }
-
-  // Getters for vertices
-  public float getX1() { return x1; }
-  public float getY1() { return y1; }
-  public float getX2() { return x2; }
-  public float getY2() { return y2; }
-  public float getX3() { return x3; }
-  public float getY3() { return y3; }
 }
 
 // Base Obstacle class - now uses composition with Collider
@@ -1519,27 +1343,5 @@ class SphereObstacle extends Obstacle {
     stroke(strokeColor);
     strokeWeight(this.strokeWeight);
     ellipse(x, y, radius * 2, radius * 2);
-  }
-}
-
-// Triangle Obstacle - simplified, uses TriangleCollider
-class TriangleObstacle extends Obstacle {
-  private float x1, y1, x2, y2, x3, y3;
-
-  public TriangleObstacle(float x1, float y1, float x2, float y2, float x3, float y3) {
-    super("triangle", new TriangleCollider(x1, y1, x2, y2, x3, y3));
-    this.x1 = x1;
-    this.y1 = y1;
-    this.x2 = x2;
-    this.y2 = y2;
-    this.x3 = x3;
-    this.y3 = y3;
-  }
-
-  public void display() {
-    fill(fillColor);
-    stroke(strokeColor);
-    strokeWeight(this.strokeWeight);
-    triangle(x1, y1, x2, y2, x3, y3);
   }
 }
