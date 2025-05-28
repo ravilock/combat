@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 // Global game instance
 // Global game instance
 Game game;
-String gameFilesBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
+String gameFilesBasePath = "./";
 
 // Logo image
 PImage studioLogo;
@@ -93,6 +93,8 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   private ArrayList<Bullet> bullets;
   private int currentMap = 0;
   private boolean mapsLoaded = false;
+  private boolean isGameEnded = false;
+  private final int maxScore = 1;
 
   private int[] scores = {0, 0}; // Player scores
 
@@ -111,7 +113,8 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   public void initialize() {
     // Load all maps from files
     loadAllMaps();
-    
+    bullets.clear();
+
     // Start with first map if loading was successful
     if (mapsLoaded) {
       loadMap(currentMap);
@@ -147,6 +150,18 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     
     if (!mapsLoaded) {
       drawErrorScreen();
+      return;
+    }
+
+    if (isGameEnded) {
+      fill(255, 0, 0);
+      textAlign(CENTER);
+      textSize(32);
+      text("GAME OVER", width/2, height/2);
+      textSize(24);
+      text("Winner: " + (scores[0] >= maxScore ? "Player 1" : "Player 2"), width/2, height/2 + 30);
+      textSize(16);
+      text("Press 'R' to restart", width/2, height/2 + 60);
       return;
     }
 
@@ -409,10 +424,11 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
 
   // Handle keys that should only trigger once per press
   private void handleSinglePressKeys() {
-    if (!mapsLoaded) {
+    if (!mapsLoaded || isGameEnded) {
       if (key == 'r' || key == 'R') {
         loadAllMaps();
         if (mapsLoaded) {
+          isGameEnded = false;
           loadMap(currentMap);
         }
       }
@@ -583,8 +599,16 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   public void increaseScore(int playerId) {
     if (playerId == 1) {
       scores[0]++;
+      if (scores[0] >= maxScore) {
+        println("Player 1 wins!");
+        isGameEnded = true;
+      }
     } else if (playerId == 2) {
       scores[1]++;
+      if (scores[1] >= maxScore) {
+        println("Player 2 wins!");
+        isGameEnded = true;
+      }
     }
     println("Player " + playerId + " scored! New score: " + scores[playerId - 1]);
   }
