@@ -121,7 +121,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   private int currentMap = 0;
   private boolean mapsLoaded = false;
   private boolean isGameEnded = false;
-  private final int maxScore = 1;
+  private final int maxScore = 5;
 
   private int[] scores = {0, 0}; // Player scores
 
