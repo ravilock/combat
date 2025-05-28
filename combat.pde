@@ -907,7 +907,6 @@ class Bullet {
   }
 }
 
-// Player class - now takes Game reference
 class Player {
   private BulletCreator bulletCreator;
   private ObstacleProvider obstacleProvider;
@@ -915,6 +914,7 @@ class Player {
   private int id;
   private float x, y;
   private float orientation;
+  private float vX, vY; // Vector components for movement
   private LocalDateTime lastHitTime;
   private float speed = 2.0;
   private float rotationSpeed = 3.0;
@@ -932,6 +932,14 @@ class Player {
     this.y = y;
     this.orientation = orientation;
     this.collider = new RectangleCollider(x, y, size, size);
+    // Initialize velocity vectors
+    updateVelocityVectors();
+  }
+
+  // Calculate velocity vector components based on current orientation
+  private void updateVelocityVectors() {
+    vX = cos(radians(orientation)) * speed;
+    vY = sin(radians(orientation)) * speed;
   }
 
   public void display() {
@@ -1011,8 +1019,8 @@ class Player {
     LocalDateTime now = LocalDateTime.now();
     if (lastShotTime == null || java.time.Duration.between(lastShotTime, now).getSeconds() >= shootCooldownSeconds) {
       // Calculate bullet spawn position (slightly in front of tank)
-      float bulletX = x + cos(radians(orientation)) * (size/2 + 5);
-      float bulletY = y + sin(radians(orientation)) * (size/2 + 5);
+      float bulletX = x + vX * (size/2 + 5) / speed;
+      float bulletY = y + vY * (size/2 + 5) / speed;
 
       bulletCreator.createBullet(bulletX, bulletY, orientation, id);
       lastShotTime = now;
@@ -1020,12 +1028,9 @@ class Player {
   }
 
   public void moveForward() {
-    float dx = cos(radians(orientation)) * speed;
-    float dy = sin(radians(orientation)) * speed;
-
-    // Calculate new position
-    float newX = x + dx;
-    float newY = y + dy;
+    // Use pre-calculated velocity components
+    float newX = x + vX;
+    float newY = y + vY;
 
     // Check arena bounds
     if (newX > 30 + size/2 && newX < width - 30 - size/2 &&
@@ -1050,12 +1055,9 @@ class Player {
   }
 
   public void moveBackward() {
-    float dx = cos(radians(orientation)) * speed;
-    float dy = sin(radians(orientation)) * speed;
-
-    // Calculate new position
-    float newX = x - dx;
-    float newY = y - dy;
+    // Use pre-calculated velocity components (reversed)
+    float newX = x - vX;
+    float newY = y - vY;
 
     // Check arena bounds
     if (newX > 30 + size/2 && newX < width - 30 - size/2 &&
@@ -1122,6 +1124,8 @@ class Player {
 
   public void rotateWithSpeed(float speed) {
     orientation += speed;
+    // Recalculate velocity vectors when orientation changes
+    updateVelocityVectors();
   }
 
   public void rotateRight() {
@@ -1141,6 +1145,8 @@ class Player {
     this.y = y;
     this.orientation = orientation;
     this.collider.updatePosition(x, y);
+    // Update velocity vectors after changing orientation
+    updateVelocityVectors();
   }
 }
 
