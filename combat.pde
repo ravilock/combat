@@ -216,6 +216,10 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     loadAllMaps();
     bullets = new ArrayList<Bullet>();
     isGameEnded = false;
+    keys = new boolean[256];
+    keyCodes = new boolean[256];
+    scores[0] = 0;
+    scores[1] = 0;
 
     // Start with first map if loading was successful
     if (mapsLoaded) {
