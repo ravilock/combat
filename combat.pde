@@ -2,11 +2,12 @@
 // Refactored with Game class to manage all game state
 
 import java.time.LocalDateTime;
+import processing.sound.*;
 
 // Global game instance
 // Global game instance
 Game game;
-String gameFilesBasePath = "/home/raylok/projects/study/desenvolvimento-de-games/projeto-2/processing-combat/";
+String gameFilesBasePath = "./";
 
 // Logo image
 PImage studioLogo;
@@ -18,7 +19,27 @@ float logoAlpha = 0; // For fade in/out
 void setup() {
   size(800, 600);
   studioLogo = loadImage(gameFilesBasePath + "campos-de-batalha-logo.png");
-  game = new Game();
+  SoundFile ricochetSound = null;
+  SoundFile shootSound = null;
+  SoundFile explosionSound = null;
+  SoundFile gameStartSound = null;
+
+  try {
+    ricochetSound = new SoundFile(this, gameFilesBasePath + "ricochet.wav");
+    shootSound = new SoundFile(this, gameFilesBasePath + "shoot.wav");
+    explosionSound = new SoundFile(this, gameFilesBasePath + "explosion.wav");
+    gameStartSound = new SoundFile(this, gameFilesBasePath + "gamestart.wav");
+    println("Sound effects loaded successfully!");
+  } catch (Exception e) {
+    println("Warning: Could not load sound effects - " + e.getMessage());
+    println("Make sure these files exist in your sketch folder:");
+    println("  - ricochet.wav");
+    println("  - shoot.wav");
+    println("  - explosion.wav");
+    println("  - gamestart.wav");
+  }
+
+  game = new Game(ricochetSound, shootSound, explosionSound, gameStartSound);
   game.initialize();
 }
 
@@ -83,6 +104,12 @@ interface PlayerHitListener {
 
 // Main Game class - contains all game state and logic
 class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncreaser, PlayerHitListener {
+  // Sound effects
+  private SoundFile ricochetSound;
+  private SoundFile shootSound;
+  private SoundFile explosionSound;
+  private SoundFile gameStartSound;
+  
   // Key state tracking
   private boolean[] keys = new boolean[256];
   private boolean[] keyCodes = new boolean[256];
@@ -93,6 +120,8 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   private ArrayList<Bullet> bullets;
   private int currentMap = 0;
   private boolean mapsLoaded = false;
+  private boolean isGameEnded = false;
+  private final int maxScore = 1;
 
   private int[] scores = {0, 0}; // Player scores
 
@@ -103,7 +132,11 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   // Player instances
   private Player player1, player2;
 
-  public Game() {
+  public Game(SoundFile ricochetSound, SoundFile shootSound, SoundFile explosionSound, SoundFile gameStartSound) {
+    this.ricochetSound = ricochetSound;
+    this.shootSound = shootSound;
+    this.explosionSound = explosionSound;
+    this.gameStartSound = gameStartSound;
     // Constructor - initialize collections
     bullets = new ArrayList<Bullet>();
   }
@@ -111,10 +144,15 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   public void initialize() {
     // Load all maps from files
     loadAllMaps();
-    
+    bullets.clear();
+    isGameEnded = false;
+
     // Start with first map if loading was successful
     if (mapsLoaded) {
       loadMap(currentMap);
+      if (gameStartSound != null) {
+        gameStartSound.play();
+      }
       println("Combat Arena Ready!");
       println("Current Map: " + mapNames[currentMap]);
       println("Use number keys 1-3 to switch maps");
@@ -147,6 +185,18 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     
     if (!mapsLoaded) {
       drawErrorScreen();
+      return;
+    }
+
+    if (isGameEnded) {
+      fill(255, 0, 0);
+      textAlign(CENTER);
+      textSize(32);
+      text("GAME OVER", width/2, height/2);
+      textSize(24);
+      text("Winner: " + (scores[0] >= maxScore ? "Player 1" : "Player 2"), width/2, height/2 + 30);
+      textSize(16);
+      text("Press 'R' to restart", width/2, height/2 + 60);
       return;
     }
 
@@ -218,18 +268,6 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
             center.getFloat("y"),
             obj.getFloat("radius")
           ));
-        } else if (kind.equals("triangle")) {
-          JSONArray vertices = obj.getJSONArray("vertices");
-          if (vertices.size() >= 3) {
-            JSONObject v1 = vertices.getJSONObject(0);
-            JSONObject v2 = vertices.getJSONObject(1);
-            JSONObject v3 = vertices.getJSONObject(2);
-            currentObstacles.add(new TriangleObstacle(
-              v1.getFloat("x"), v1.getFloat("y"),
-              v2.getFloat("x"), v2.getFloat("y"),
-              v3.getFloat("x"), v3.getFloat("y")
-            ));
-          }
         }
       }
       JSONArray currentPlayers = mapData[mapIndex].getJSONArray("players");
@@ -294,6 +332,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     JSONObject p1Data = players.getJSONObject(0);
     JSONObject p1Pos = p1Data.getJSONObject("position");
     player1 = new Player(
+      shootSound,
       this,
       this,
       this,
@@ -307,6 +346,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     JSONObject p2Data = players.getJSONObject(1);
     JSONObject p2Pos = p2Data.getJSONObject("position");
     player2 = new Player(
+      shootSound,
       this,
       this,
       this,
@@ -409,16 +449,6 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
 
   // Handle keys that should only trigger once per press
   private void handleSinglePressKeys() {
-    if (!mapsLoaded) {
-      if (key == 'r' || key == 'R') {
-        loadAllMaps();
-        if (mapsLoaded) {
-          loadMap(currentMap);
-        }
-      }
-      return;
-    }
-
     // Map selection (only trigger once per press)
     if (key >= '1' && key <= '3') {
       int newMap = key - '1';
@@ -448,10 +478,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     // Debug and utility functions (only trigger once per press)
     if (key == 'r' || key == 'R') {
       println("Reloading all maps...");
-      loadAllMaps();
-      if (mapsLoaded) {
-        loadMap(currentMap);
-      }
+      initialize(); // Reinitialize game state
     }
 
     if (key == 'i' || key == 'I') {
@@ -563,7 +590,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   }
 
   public void createBullet(float x, float y, float angle, int playerId) {
-    bullets.add(new Bullet(this, this, this, this, x, y, angle, playerId));
+    bullets.add(new Bullet(ricochetSound, explosionSound, this, this, this, this, x, y, angle, playerId));
   }
 
   // Getters for game state (used by Player and Bullet classes)
@@ -583,8 +610,16 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   public void increaseScore(int playerId) {
     if (playerId == 1) {
       scores[0]++;
+      if (scores[0] >= maxScore) {
+        println("Player 1 wins!");
+        isGameEnded = true;
+      }
     } else if (playerId == 2) {
       scores[1]++;
+      if (scores[1] >= maxScore) {
+        println("Player 2 wins!");
+        isGameEnded = true;
+      }
     }
     println("Player " + playerId + " scored! New score: " + scores[playerId - 1]);
   }
@@ -637,15 +672,16 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   }
 }
 
-// Bullet class - now takes Game reference
 class Bullet {
+  private SoundFile ricochetSound;
+  private SoundFile explosionSound;
   private ObstacleProvider obstacleProvider;
   private PlayerProvider playerProvider;
   private ScoreIncreaser scoreIncreaser;
   private PlayerHitListener playerHitListener;
   private float x, y;
-  private float angle;
-  private float speed = 4.0; // Slightly faster than player speed
+  private float speed = 4.0; // Vector intensity
+  private float vX, vY; // Velocity components
   private LocalDateTime bulletCreationTime;
   private final int maxBulletLifetime = 5; // Maximum lifetime in seconds
   private int playerId;
@@ -655,17 +691,22 @@ class Bullet {
   private int bounces = 0; // Track number of bounces
   private final int maxBounces = 4; // Maximum number of bounces allowed
 
-  public Bullet(ObstacleProvider obstacleProvider, PlayerProvider playerProvider, ScoreIncreaser scoreIncreaser, PlayerHitListener playerHitListener, float startX, float startY, float angle, int playerId) {
+  public Bullet(SoundFile ricochetSound, SoundFile explosionSound, ObstacleProvider obstacleProvider, PlayerProvider playerProvider, ScoreIncreaser scoreIncreaser, PlayerHitListener playerHitListener, float startX, float startY, float angle, int playerId) {
+    this.ricochetSound = ricochetSound;
+    this.explosionSound = explosionSound;
     this.obstacleProvider = obstacleProvider;
     this.playerProvider = playerProvider;
     this.scoreIncreaser = scoreIncreaser;
     this.playerHitListener = playerHitListener;
     this.x = startX;
     this.y = startY;
-    this.angle = angle;
     this.playerId = playerId;
     this.collider = new SphereCollider(x, y, size/2); // Radius is half the size
     this.bulletCreationTime = LocalDateTime.now();
+
+    // Calculate velocity components from angle and speed
+    this.vX = cos(radians(angle)) * speed;
+    this.vY = sin(radians(angle)) * speed;
   }
 
   public void update() {
@@ -678,9 +719,9 @@ class Bullet {
       return;
       }
     }
-    // Calculate next position
-    float nextX = x + cos(radians(angle)) * speed;
-    float nextY = y + sin(radians(angle)) * speed;
+    // Calculate next position using velocity components
+    float nextX = x + vX;
+    float nextY = y + vY;
     
     // Check bounds and handle bouncing
     boolean bounced = false;
@@ -688,9 +729,10 @@ class Bullet {
     // Check horizontal bounds (left/right walls)
     if (nextX < 20 || nextX > width - 20) {
       if (bounces < maxBounces) {
-        angle = 180 - angle; // Reflect horizontally
+        vX = -vX; // Reflect velocity horizontally
         bounces++;
         bounced = true;
+        if (ricochetSound != null) ricochetSound.play();
         // Ensure bullet stays within bounds
         nextX = constrain(nextX, 20, width - 20);
       } else {
@@ -698,13 +740,14 @@ class Bullet {
         return;
       }
     }
-    
+
     // Check vertical bounds (top/bottom walls)
     if (nextY < 20 || nextY > height - 20) {
       if (bounces < maxBounces) {
-        angle = -angle; // Reflect vertically
+        vY = -vY; // Reflect velocity vertically
         bounces++;
         bounced = true;
+        if (ricochetSound != null) ricochetSound.play();
         // Ensure bullet stays within bounds
         nextY = constrain(nextY, 20, height - 20);
       } else {
@@ -712,7 +755,7 @@ class Bullet {
         return;
       }
     }
-    
+
     // If we bounced off walls, update position and collider, then continue
     if (bounced) {
       x = nextX;
@@ -727,16 +770,15 @@ class Bullet {
       for (Obstacle obstacle : currentObstacles) {
         if (obstacle.isCollidingWith(nextX, nextY, size)) {
           if (bounces < maxBounces) {
-            // Calculate bounce angle based on obstacle type
-            float bounceAngle = calculateBounceAngle(obstacle, nextX, nextY);
-            angle = bounceAngle;
+            // Calculate bounce velocity based on obstacle type
+            calculateBounceVelocity(obstacle, nextX, nextY);
             bounces++;
+            if (ricochetSound != null) ricochetSound.play();
             
             // Move bullet slightly away from obstacle to prevent getting stuck
-            x += cos(radians(angle)) * 2;
-            y += sin(radians(angle)) * 2;
+            x += vX * 0.5;
+            y += vY * 0.5;
             collider.updatePosition(x, y);
-            return; // Skip movement this frame
           } else {
             shouldRemove = true;
             return;
@@ -758,6 +800,7 @@ class Bullet {
       if (collider.isCollidingWith(player1.getCollider())) {
         scoreIncreaser.increaseScore(2); // Player 2 scores
         playerHitListener.onPlayerHit(1); // Notify player hit
+        if (explosionSound != null) explosionSound.play();
         shouldRemove = true;
         return;
       }
@@ -767,32 +810,31 @@ class Bullet {
       if (collider.isCollidingWith(player2.getCollider())) {
         scoreIncreaser.increaseScore(1); // Player 1 scores
         playerHitListener.onPlayerHit(2); // Notify player hit
+        if (explosionSound != null) explosionSound.play();
         shouldRemove = true;
         return;
       }
     }
   }
   
-  // Calculate bounce angle based on obstacle type and collision point
-  private float calculateBounceAngle(Obstacle obstacle, float bulletX, float bulletY) {
+  // Calculate bounce velocity based on obstacle type and collision point
+  private void calculateBounceVelocity(Obstacle obstacle, float bulletX, float bulletY) {
     String obstacleType = obstacle.getKind();
     
     if (obstacleType.equals("rectangle")) {
       RectangleObstacle rect = (RectangleObstacle) obstacle;
-      return calculateRectangleBounce(rect, bulletX, bulletY);
+      calculateRectangleBounceVelocity(rect, bulletX, bulletY);
     } else if (obstacleType.equals("sphere")) {
       SphereObstacle sphere = (SphereObstacle) obstacle;
-      return calculateSphereBounce(sphere, bulletX, bulletY);
-    } else if (obstacleType.equals("triangle")) {
-      TriangleObstacle triangle = (TriangleObstacle) obstacle;
-      return calculateTriangleBounce(triangle, bulletX, bulletY);
+      calculateSphereBounceVelocity(sphere, bulletX, bulletY);
+    } else {
+      // Default: reverse velocity
+      vX = -vX;
+      vY = -vY;
     }
-    
-    // Default: reverse direction
-    return angle + 180;
   }
   
-  private float calculateRectangleBounce(RectangleObstacle rect, float bulletX, float bulletY) {
+  private void calculateRectangleBounceVelocity(RectangleObstacle rect, float bulletX, float bulletY) {
     // Get rectangle collider for position and size
     RectangleCollider rectCollider = (RectangleCollider) rect.collider;
     float rectX = rectCollider.getX();
@@ -814,17 +856,17 @@ class Bullet {
     
     float minDist = min(min(distToLeft, distToRight), min(distToTop, distToBottom));
     
-    // Reflect based on closest edge
+    // Reflect velocity based on closest edge
     if (minDist == distToLeft || minDist == distToRight) {
       // Hit left or right edge - reflect horizontally
-      return 180 - angle;
+      vX = -vX;
     } else {
       // Hit top or bottom edge - reflect vertically
-      return -angle;
+      vY = -vY;
     }
   }
   
-  private float calculateSphereBounce(SphereObstacle sphere, float bulletX, float bulletY) {
+  private void calculateSphereBounceVelocity(SphereObstacle sphere, float bulletX, float bulletY) {
     // Get sphere collider for position
     SphereCollider sphereCollider = (SphereCollider) sphere.collider;
     float sphereX = sphereCollider.getX();
@@ -841,64 +883,10 @@ class Bullet {
       normalY /= normalLength;
     }
     
-    // Convert current angle to velocity vector
-    float vx = cos(radians(angle));
-    float vy = sin(radians(angle));
-    
     // Reflect velocity using normal: v' = v - 2(v·n)n
-    float dotProduct = vx * normalX + vy * normalY;
-    float reflectedVx = vx - 2 * dotProduct * normalX;
-    float reflectedVy = vy - 2 * dotProduct * normalY;
-    
-    // Convert back to angle
-    return degrees(atan2(reflectedVy, reflectedVx));
-  }
-  
-  private float calculateTriangleBounce(TriangleObstacle triangle, float bulletX, float bulletY) {
-    // For simplicity with triangles, find the closest edge and reflect off it
-    TriangleCollider triCollider = (TriangleCollider) triangle.collider;
-    
-    // Calculate distances to each edge
-    float dist1 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX1(), triCollider.getY1(), triCollider.getX2(), triCollider.getY2());
-    float dist2 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX2(), triCollider.getY2(), triCollider.getX3(), triCollider.getY3());
-    float dist3 = distancePointToLineSegment(bulletX, bulletY, triCollider.getX3(), triCollider.getY3(), triCollider.getX1(), triCollider.getY1());
-    
-    // Find closest edge and calculate normal
-    float edgeAngle;
-    if (dist1 <= dist2 && dist1 <= dist3) {
-      // Closest to edge 1-2
-      edgeAngle = atan2(triCollider.getY2() - triCollider.getY1(), triCollider.getX2() - triCollider.getX1());
-    } else if (dist2 <= dist3) {
-      // Closest to edge 2-3
-      edgeAngle = atan2(triCollider.getY3() - triCollider.getY2(), triCollider.getX3() - triCollider.getX2());
-    } else {
-      // Closest to edge 3-1
-      edgeAngle = atan2(triCollider.getY1() - triCollider.getY3(), triCollider.getX1() - triCollider.getX3());
-    }
-    
-    // Calculate reflection angle
-    float normalAngle = edgeAngle + 90; // Normal is perpendicular to edge
-    float incidentAngle = angle - normalAngle;
-    return normalAngle - incidentAngle;
-  }
-  
-  // Helper method for triangle bounce calculation
-  private float distancePointToLineSegment(float px, float py, float x1, float y1, float x2, float y2) {
-    float dx = x2 - x1;
-    float dy = y2 - y1;
-    float lengthSquared = dx * dx + dy * dy;
-    
-    if (lengthSquared == 0) {
-      return dist(px, py, x1, y1);
-    }
-    
-    float t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
-    t = constrain(t, 0, 1);
-    
-    float closestX = x1 + t * dx;
-    float closestY = y1 + t * dy;
-    
-    return dist(px, py, closestX, closestY);
+    float dotProduct = vX * normalX + vY * normalY;
+    vX = vX - 2 * dotProduct * normalX;
+    vY = vY - 2 * dotProduct * normalY;
   }
 
   public void display() {
@@ -918,14 +906,9 @@ class Bullet {
     }
     
     strokeWeight(1);
-    rectMode(CENTER);
     
-    // Draw bullet as small rotated square
-    pushMatrix();
-    translate(x, y);
-    rotate(radians(angle + 45)); // Rotate 45 degrees for diamond shape
-    rect(0, 0, size, size);
-    popMatrix();
+    // Draw bullet as circle
+    ellipse(x, y, size, size);
     
     // Draw bounce count indicator (small text above bullet)
     if (bounces > 0) {
@@ -943,16 +926,23 @@ class Bullet {
   public SphereCollider getCollider() {
     return collider;
   }
+
+  // Getter methods for velocity components and speed
+  public float getVX() { return vX; }
+  public float getVY() { return vY; }
+  public float getSpeed() { return speed; }
+  public float getCurrentSpeed() { return sqrt(vX * vX + vY * vY); }
 }
 
-// Player class - now takes Game reference
 class Player {
+  private SoundFile shootSound;
   private BulletCreator bulletCreator;
   private ObstacleProvider obstacleProvider;
   private PlayerProvider playerProvider;
   private int id;
   private float x, y;
   private float orientation;
+  private float vX, vY; // Vector components for movement
   private LocalDateTime lastHitTime;
   private float speed = 2.0;
   private float rotationSpeed = 3.0;
@@ -961,7 +951,8 @@ class Player {
   private final int shootCooldownSeconds = 4; // Cooldown in seconds
   private RectangleCollider collider; // Use rectangle collider for players
 
-  Player(BulletCreator bulletCreator, ObstacleProvider obstacleProvider, PlayerProvider playerProvider, int id, float x, float y, float orientation) {
+  Player(SoundFile shootSound, BulletCreator bulletCreator, ObstacleProvider obstacleProvider, PlayerProvider playerProvider, int id, float x, float y, float orientation) {
+    this.shootSound = shootSound;
     this.bulletCreator = bulletCreator;
     this.obstacleProvider = obstacleProvider;
     this.playerProvider = playerProvider;
@@ -970,6 +961,13 @@ class Player {
     this.y = y;
     this.orientation = orientation;
     this.collider = new RectangleCollider(x, y, size, size);
+    // Initialize velocity vectors
+    updateVelocityVectors();
+  }
+  // Calculate velocity vector components based on current orientation
+  private void updateVelocityVectors() {
+    vX = cos(radians(orientation)) * speed;
+    vY = sin(radians(orientation)) * speed;
   }
 
   public void display() {
@@ -1049,21 +1047,19 @@ class Player {
     LocalDateTime now = LocalDateTime.now();
     if (lastShotTime == null || java.time.Duration.between(lastShotTime, now).getSeconds() >= shootCooldownSeconds) {
       // Calculate bullet spawn position (slightly in front of tank)
-      float bulletX = x + cos(radians(orientation)) * (size/2 + 5);
-      float bulletY = y + sin(radians(orientation)) * (size/2 + 5);
+      float bulletX = x + vX * (size/2 + 5) / speed;
+      float bulletY = y + vY * (size/2 + 5) / speed;
 
       bulletCreator.createBullet(bulletX, bulletY, orientation, id);
+      if (shootSound != null) shootSound.play();
       lastShotTime = now;
     }
   }
 
   public void moveForward() {
-    float dx = cos(radians(orientation)) * speed;
-    float dy = sin(radians(orientation)) * speed;
-
-    // Calculate new position
-    float newX = x + dx;
-    float newY = y + dy;
+    // Use pre-calculated velocity components
+    float newX = x + vX;
+    float newY = y + vY;
 
     // Check arena bounds
     if (newX > 30 + size/2 && newX < width - 30 - size/2 &&
@@ -1088,12 +1084,9 @@ class Player {
   }
 
   public void moveBackward() {
-    float dx = cos(radians(orientation)) * speed;
-    float dy = sin(radians(orientation)) * speed;
-
-    // Calculate new position
-    float newX = x - dx;
-    float newY = y - dy;
+    // Use pre-calculated velocity components (reversed)
+    float newX = x - vX;
+    float newY = y - vY;
 
     // Check arena bounds
     if (newX > 30 + size/2 && newX < width - 30 - size/2 &&
@@ -1160,6 +1153,8 @@ class Player {
 
   public void rotateWithSpeed(float speed) {
     orientation += speed;
+    // Recalculate velocity vectors when orientation changes
+    updateVelocityVectors();
   }
 
   public void rotateRight() {
@@ -1179,40 +1174,35 @@ class Player {
     this.y = y;
     this.orientation = orientation;
     this.collider.updatePosition(x, y);
+    // Update velocity vectors after changing orientation
+    updateVelocityVectors();
   }
 }
 
-// Base Collider class - handles collision detection logic
-abstract class Collider {
-  protected String type;
-
-  public Collider(String type) {
-    this.type = type;
-  }
-
-  public abstract boolean isCollidingWith(float x, float y, float size);
-  public abstract boolean isCollidingWith(Player player);
-  public abstract boolean isCollidingWith(Collider other);
-  public abstract void updatePosition(float... params);
-
-  public String getType() {
-    return type;
-  }
+// Collider interface - defines collision detection contract
+interface Collider {
+  boolean isCollidingWith(Collider other);
+  boolean isCollidingWith(float x, float y, float size);
+  boolean isCollidingWith(Player player);
+  void updatePosition(float... params);
+  String getType();
+  
+  // Visitor pattern methods for type-safe collision detection
+  boolean collidesWith(RectangleCollider rect);
+  boolean collidesWith(SphereCollider sphere);
 }
 
 // Rectangle Collider
-class RectangleCollider extends Collider {
+class RectangleCollider implements Collider {
   private float x, y, width, height;
 
   public RectangleCollider(float x, float y, float width, float height) {
-    super("rectangle");
     this.x = x;
     this.y = y;
     this.width = width;
     this.height = height;
   }
 
-  // Update position - params: newX, newY
   public void updatePosition(float... params) {
     if (params.length >= 2) {
       this.x = params[0];
@@ -1220,7 +1210,6 @@ class RectangleCollider extends Collider {
     }
   }
 
-  // Update size - useful for dynamic obstacles
   public void updateSize(float newWidth, float newHeight) {
     this.width = newWidth;
     this.height = newHeight;
@@ -1229,8 +1218,8 @@ class RectangleCollider extends Collider {
   public boolean isCollidingWith(Player player) {
     return isCollidingWith(player.getX(), player.getY(), player.getSize());
   }
+
   public boolean isCollidingWith(float px, float py, float playerSize) {
-    // AABB collision detection
     return (px - playerSize/2 < x + width/2 &&
             px + playerSize/2 > x - width/2 &&
             py - playerSize/2 < y + height/2 &&
@@ -1238,24 +1227,25 @@ class RectangleCollider extends Collider {
   }
 
   public boolean isCollidingWith(Collider other) {
-    if (other instanceof RectangleCollider) {
-      RectangleCollider rect = (RectangleCollider) other;
-      return (x - width/2 < rect.x + rect.width/2 &&
-              x + width/2 > rect.x - rect.width/2 &&
-              y - height/2 < rect.y + rect.height/2 &&
-              y + height/2 > rect.y - rect.height/2);
-    } else if (other instanceof SphereCollider) {
-      SphereCollider sphere = (SphereCollider) other;
-      // Rectangle-circle collision
-      float closestX = constrain(sphere.x, x - width/2, x + width/2);
-      float closestY = constrain(sphere.y, y - height/2, y + height/2);
-      float distance = dist(sphere.x, sphere.y, closestX, closestY);
-      return distance <= sphere.radius;
-    }
-    return false;
+    return other.collidesWith(this);
   }
 
-  // Getters for position and size
+  // Visitor pattern implementations
+  public boolean collidesWith(RectangleCollider rect) {
+    return (x - width/2 < rect.x + rect.width/2 &&
+            x + width/2 > rect.x - rect.width/2 &&
+            y - height/2 < rect.y + rect.height/2 &&
+            y + height/2 > rect.y - rect.height/2);
+  }
+
+  public boolean collidesWith(SphereCollider sphere) {
+    float closestX = constrain(sphere.getX(), x - width/2, x + width/2);
+    float closestY = constrain(sphere.getY(), y - height/2, y + height/2);
+    float distance = dist(sphere.getX(), sphere.getY(), closestX, closestY);
+    return distance <= sphere.getRadius();
+  }
+
+  public String getType() { return "rectangle"; }
   public float getX() { return x; }
   public float getY() { return y; }
   public float getWidth() { return width; }
@@ -1263,17 +1253,15 @@ class RectangleCollider extends Collider {
 }
 
 // Sphere Collider
-class SphereCollider extends Collider {
+class SphereCollider implements Collider {
   private float x, y, radius;
 
   public SphereCollider(float x, float y, float radius) {
-    super("sphere");
     this.x = x;
     this.y = y;
     this.radius = radius;
   }
 
-  // Update position - params: newX, newY
   public void updatePosition(float... params) {
     if (params.length >= 2) {
       this.x = params[0];
@@ -1281,7 +1269,6 @@ class SphereCollider extends Collider {
     }
   }
 
-  // Update radius - useful for dynamic obstacles
   public void updateRadius(float newRadius) {
     this.radius = newRadius;
   }
@@ -1296,130 +1283,26 @@ class SphereCollider extends Collider {
   }
 
   public boolean isCollidingWith(Collider other) {
-    if (other instanceof SphereCollider) {
-      SphereCollider sphere = (SphereCollider) other;
-      float distance = dist(x, y, sphere.x, sphere.y);
-      return distance < (radius + sphere.radius);
-    } else if (other instanceof RectangleCollider) {
-      RectangleCollider rect = (RectangleCollider) other;
-      // Circle-rectangle collision
-      float closestX = constrain(x, rect.x - rect.width/2, rect.x + rect.width/2);
-      float closestY = constrain(y, rect.y - rect.height/2, rect.y + rect.height/2);
-      float distance = dist(x, y, closestX, closestY);
-      return distance <= radius;
-    }
-    return false;
+    return other.collidesWith(this);
   }
 
-  // Getters for position and radius
+  // Visitor pattern implementations
+  public boolean collidesWith(RectangleCollider rect) {
+    float closestX = constrain(x, rect.getX() - rect.getWidth()/2, rect.getX() + rect.getWidth()/2);
+    float closestY = constrain(y, rect.getY() - rect.getHeight()/2, rect.getY() + rect.getHeight()/2);
+    float distance = dist(x, y, closestX, closestY);
+    return distance <= radius;
+  }
+
+  public boolean collidesWith(SphereCollider sphere) {
+    float distance = dist(x, y, sphere.x, sphere.y);
+    return distance < (radius + sphere.radius);
+  }
+
+  public String getType() { return "sphere"; }
   public float getX() { return x; }
   public float getY() { return y; }
   public float getRadius() { return radius; }
-}
-
-// Triangle Collider
-class TriangleCollider extends Collider {
-  private float x1, y1, x2, y2, x3, y3;
-
-  public TriangleCollider(float x1, float y1, float x2, float y2, float x3, float y3) {
-    super("triangle");
-    this.x1 = x1;
-    this.y1 = y1;
-    this.x2 = x2;
-    this.y2 = y2;
-    this.x3 = x3;
-    this.y3 = y3;
-  }
-
-  // Update position - params: x1, y1, x2, y2, x3, y3
-  public void updatePosition(float... params) {
-    if (params.length >= 6) {
-      this.x1 = params[0];
-      this.y1 = params[1];
-      this.x2 = params[2];
-      this.y2 = params[3];
-      this.x3 = params[4];
-      this.y3 = params[5];
-    }
-  }
-
-  public boolean isCollidingWith(Player player) {
-    return isCollidingWith(player.getX(), player.getY(), player.getSize());
-  }
-
-  public boolean isCollidingWith(float px, float py, float playerSize) {
-    float playerRadius = playerSize / 2;
-    
-    // First check if player center is inside triangle
-    if (isPointInTriangle(px, py)) {
-      return true;
-    }
-    
-    // Check distance to each edge of the triangle
-    float dist1 = distancePointToLineSegment(px, py, x1, y1, x2, y2);
-    float dist2 = distancePointToLineSegment(px, py, x2, y2, x3, y3);
-    float dist3 = distancePointToLineSegment(px, py, x3, y3, x1, y1);
-    
-    float minDistanceToEdge = min(dist1, min(dist2, dist3));
-    
-    return minDistanceToEdge <= playerRadius;
-  }
-
-  public boolean isCollidingWith(Collider other) {
-    if (other instanceof SphereCollider) {
-      SphereCollider sphere = (SphereCollider) other;
-      return isCollidingWith(sphere.x, sphere.y, sphere.radius * 2);
-    } else if (other instanceof RectangleCollider) {
-      RectangleCollider rect = (RectangleCollider) other;
-      // Check if any corner of rectangle is inside triangle or if triangle intersects rectangle
-      return isCollidingWith(rect.x, rect.y, sqrt(rect.width*rect.width + rect.height*rect.height));
-    }
-    return false;
-  }
-
-  // Check if a point is inside the triangle using barycentric coordinates
-  private boolean isPointInTriangle(float px, float py) {
-    float denom = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
-    if (abs(denom) < 0.001) return false; // Degenerate triangle
-    
-    float a = ((y2 - y3) * (px - x3) + (x3 - x2) * (py - y3)) / denom;
-    float b = ((y3 - y1) * (px - x3) + (x1 - x3) * (py - y3)) / denom;
-    float c = 1 - a - b;
-    
-    return a >= 0 && b >= 0 && c >= 0;
-  }
-
-  // Calculate distance from point to line segment
-  private float distancePointToLineSegment(float px, float py, float x1, float y1, float x2, float y2) {
-    float dx = x2 - x1;
-    float dy = y2 - y1;
-    float lengthSquared = dx * dx + dy * dy;
-    
-    if (lengthSquared == 0) {
-      // Line segment is actually a point
-      return dist(px, py, x1, y1);
-    }
-    
-    // Calculate parameter t for projection of point onto line
-    float t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
-    
-    // Clamp t to [0, 1] to stay within line segment
-    t = constrain(t, 0, 1);
-
-    // Find closest point on line segment
-    float closestX = x1 + t * dx;
-    float closestY = y1 + t * dy;
-
-    return dist(px, py, closestX, closestY);
-  }
-
-  // Getters for vertices
-  public float getX1() { return x1; }
-  public float getY1() { return y1; }
-  public float getX2() { return x2; }
-  public float getY2() { return y2; }
-  public float getX3() { return x3; }
-  public float getY3() { return y3; }
 }
 
 // Base Obstacle class - now uses composition with Collider
@@ -1495,27 +1378,5 @@ class SphereObstacle extends Obstacle {
     stroke(strokeColor);
     strokeWeight(this.strokeWeight);
     ellipse(x, y, radius * 2, radius * 2);
-  }
-}
-
-// Triangle Obstacle - simplified, uses TriangleCollider
-class TriangleObstacle extends Obstacle {
-  private float x1, y1, x2, y2, x3, y3;
-
-  public TriangleObstacle(float x1, float y1, float x2, float y2, float x3, float y3) {
-    super("triangle", new TriangleCollider(x1, y1, x2, y2, x3, y3));
-    this.x1 = x1;
-    this.y1 = y1;
-    this.x2 = x2;
-    this.y2 = y2;
-    this.x3 = x3;
-    this.y3 = y3;
-  }
-
-  public void display() {
-    fill(fillColor);
-    stroke(strokeColor);
-    strokeWeight(this.strokeWeight);
-    triangle(x1, y1, x2, y2, x3, y3);
   }
 }
