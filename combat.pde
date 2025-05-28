@@ -10,12 +10,12 @@ Game game;
 String gameFilesBasePath = "./";
 
 PImage studioLogo;
-boolean showLogo = true;
-boolean showStory = false;
+String gamePhase = "logo"; // Can be: "logo", "story", "game"
 int logoDisplayFrames = 180; // Show logo for 3 seconds at 60 FPS
-int storyDisplayFrames = 360; // Show story for 3 seconds at 60 FPS
+int storyDisplayFrames = 360; // Show story for 6 seconds at 60 FPS
 float logoAlpha = 0; // For fade in/out
 float storyAlpha = 0; // For fade in/out
+boolean backgroundMusicStarted = false;
 
 // Processing setup function
 void setup() {
@@ -25,12 +25,15 @@ void setup() {
   SoundFile shootSound = null;
   SoundFile explosionSound = null;
   SoundFile gameStartSound = null;
+  SoundFile backgroudMusic = null;
 
   try {
     ricochetSound = new SoundFile(this, gameFilesBasePath + "ricochet.wav");
     shootSound = new SoundFile(this, gameFilesBasePath + "shoot.wav");
     explosionSound = new SoundFile(this, gameFilesBasePath + "explosion.wav");
     gameStartSound = new SoundFile(this, gameFilesBasePath + "gamestart.wav");
+    backgroudMusic = new SoundFile(this, gameFilesBasePath + "theme-song.wav");
+
     println("Sound effects loaded successfully!");
   } catch (Exception e) {
     println("Warning: Could not load sound effects - " + e.getMessage());
@@ -41,13 +44,16 @@ void setup() {
     println("  - gamestart.wav");
   }
 
-  game = new Game(ricochetSound, shootSound, explosionSound, gameStartSound);
-  game.initialize();
+  game = new Game(ricochetSound, shootSound, explosionSound, backgroudMusic);
+  if (gameStartSound != null) {
+      gameStartSound.play();
+  }
 }
+  // Don't initialize game yet - wait for story phase to complete
 
 // Processing draw function
 void draw() {
-  if (showLogo && studioLogo != null && logoDisplayFrames > 0) {
+  if (gamePhase.equals("logo") && studioLogo != null && logoDisplayFrames > 0) {
     background(20, 20, 20);
     imageMode(CENTER);
 
@@ -66,13 +72,12 @@ void draw() {
 
     logoDisplayFrames--;
     if (logoDisplayFrames == 0) {
-      showLogo = false;
-      showStory = true; // Start showing story after logo
+      gamePhase = "story"; // Transition to story phase
     }
     return;
   }
   
-  if (showStory && storyDisplayFrames > 0) {
+  if (gamePhase.equals("story") && storyDisplayFrames > 0) {
     background(15, 15, 25); // Slightly different background for story
     
     // Fade in for first 1s, hold, fade out for last 1s
@@ -110,22 +115,35 @@ void draw() {
     
     storyDisplayFrames--;
     if (storyDisplayFrames == 0) {
-      showStory = false;
+      gamePhase = "game"; // Transition to game phase
+      game.initialize(); // Initialize game when story ends
+      // Start background music when game phase begins
+      if (!backgroundMusicStarted && game.getBackgroundMusic() != null) {
+        game.getBackgroundMusic().loop();
+        backgroundMusicStarted = true;
+      }
     }
     return;
   }
   
-  game.update();
-  game.render();
+  // Game phase - only update and render if game is initialized
+  if (gamePhase.equals("game")) {
+    game.update();
+    game.render();
+  }
 }
 
 // Processing key event handlers
 void keyPressed() {
-  game.handleKeyPressed();
+  if (gamePhase.equals("game")) {
+    game.handleKeyPressed();
+  }
 }
 
 void keyReleased() {
-  game.handleKeyReleased();
+  if (gamePhase.equals("game")) {
+    game.handleKeyReleased();
+  }
 }
 
 // Interfaces for game functionality
@@ -155,8 +173,8 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   private SoundFile ricochetSound;
   private SoundFile shootSound;
   private SoundFile explosionSound;
-  private SoundFile gameStartSound;
-  
+  private SoundFile backgroudMusic;
+
   // Key state tracking
   private boolean[] keys = new boolean[256];
   private boolean[] keyCodes = new boolean[256];
@@ -179,27 +197,29 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   // Player instances
   private Player player1, player2;
 
-  public Game(SoundFile ricochetSound, SoundFile shootSound, SoundFile explosionSound, SoundFile gameStartSound) {
+  public Game(SoundFile ricochetSound, SoundFile shootSound, SoundFile explosionSound, SoundFile backgroudMusic) {
     this.ricochetSound = ricochetSound;
     this.shootSound = shootSound;
     this.explosionSound = explosionSound;
-    this.gameStartSound = gameStartSound;
+    this.backgroudMusic = backgroudMusic;
     // Constructor - initialize collections
     bullets = new ArrayList<Bullet>();
+  }
+
+  // Getter for background music
+  public SoundFile getBackgroundMusic() {
+    return backgroudMusic;
   }
 
   public void initialize() {
     // Load all maps from files
     loadAllMaps();
-    bullets.clear();
+    bullets = new ArrayList<Bullet>();
     isGameEnded = false;
 
     // Start with first map if loading was successful
     if (mapsLoaded) {
       loadMap(currentMap);
-      if (gameStartSound != null) {
-        gameStartSound.play();
-      }
       println("Combat Arena Ready!");
       println("Current Map: " + mapNames[currentMap]);
       println("Use number keys 1-3 to switch maps");
