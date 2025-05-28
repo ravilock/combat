@@ -22,11 +22,13 @@ void setup() {
   SoundFile ricochetSound = null;
   SoundFile shootSound = null;
   SoundFile explosionSound = null;
+  SoundFile gameStartSound = null;
 
   try {
     ricochetSound = new SoundFile(this, gameFilesBasePath + "ricochet.wav");
     shootSound = new SoundFile(this, gameFilesBasePath + "shoot.wav");
     explosionSound = new SoundFile(this, gameFilesBasePath + "explosion.wav");
+    gameStartSound = new SoundFile(this, gameFilesBasePath + "gamestart.wav");
     println("Sound effects loaded successfully!");
   } catch (Exception e) {
     println("Warning: Could not load sound effects - " + e.getMessage());
@@ -34,9 +36,10 @@ void setup() {
     println("  - ricochet.wav");
     println("  - shoot.wav");
     println("  - explosion.wav");
+    println("  - gamestart.wav");
   }
 
-  game = new Game(ricochetSound, shootSound, explosionSound);
+  game = new Game(ricochetSound, shootSound, explosionSound, gameStartSound);
   game.initialize();
 }
 
@@ -105,6 +108,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   private SoundFile ricochetSound;
   private SoundFile shootSound;
   private SoundFile explosionSound;
+  private SoundFile gameStartSound;
   
   // Key state tracking
   private boolean[] keys = new boolean[256];
@@ -128,10 +132,11 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   // Player instances
   private Player player1, player2;
 
-  public Game(SoundFile ricochetSound, SoundFile shootSound, SoundFile explosionSound) {
+  public Game(SoundFile ricochetSound, SoundFile shootSound, SoundFile explosionSound, SoundFile gameStartSound) {
     this.ricochetSound = ricochetSound;
     this.shootSound = shootSound;
     this.explosionSound = explosionSound;
+    this.gameStartSound = gameStartSound;
     // Constructor - initialize collections
     bullets = new ArrayList<Bullet>();
   }
@@ -140,10 +145,14 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     // Load all maps from files
     loadAllMaps();
     bullets.clear();
+    isGameEnded = false;
 
     // Start with first map if loading was successful
     if (mapsLoaded) {
       loadMap(currentMap);
+      if (gameStartSound != null) {
+        gameStartSound.play();
+      }
       println("Combat Arena Ready!");
       println("Current Map: " + mapNames[currentMap]);
       println("Use number keys 1-3 to switch maps");
@@ -440,17 +449,6 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
 
   // Handle keys that should only trigger once per press
   private void handleSinglePressKeys() {
-    if (!mapsLoaded || isGameEnded) {
-      if (key == 'r' || key == 'R') {
-        loadAllMaps();
-        if (mapsLoaded) {
-          isGameEnded = false;
-          loadMap(currentMap);
-        }
-      }
-      return;
-    }
-
     // Map selection (only trigger once per press)
     if (key >= '1' && key <= '3') {
       int newMap = key - '1';
@@ -480,10 +478,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     // Debug and utility functions (only trigger once per press)
     if (key == 'r' || key == 'R') {
       println("Reloading all maps...");
-      loadAllMaps();
-      if (mapsLoaded) {
-        loadMap(currentMap);
-      }
+      initialize(); // Reinitialize game state
     }
 
     if (key == 'i' || key == 'I') {
