@@ -9,11 +9,13 @@ import processing.sound.*;
 Game game;
 String gameFilesBasePath = "./";
 
-// Logo image
 PImage studioLogo;
 boolean showLogo = true;
+boolean showStory = false;
 int logoDisplayFrames = 180; // Show logo for 3 seconds at 60 FPS
+int storyDisplayFrames = 360; // Show story for 3 seconds at 60 FPS
 float logoAlpha = 0; // For fade in/out
+float storyAlpha = 0; // For fade in/out
 
 // Processing setup function
 void setup() {
@@ -65,9 +67,54 @@ void draw() {
     logoDisplayFrames--;
     if (logoDisplayFrames == 0) {
       showLogo = false;
+      showStory = true; // Start showing story after logo
     }
     return;
   }
+  
+  if (showStory && storyDisplayFrames > 0) {
+    background(15, 15, 25); // Slightly different background for story
+    
+    // Fade in for first 1s, hold, fade out for last 1s
+    int fadeFrames = 30; // 0.5 seconds at 60 FPS
+    if (storyDisplayFrames > 360 - fadeFrames) {
+      storyAlpha = map(storyDisplayFrames, 360, 360 - fadeFrames, 0, 255);
+    } else if (storyDisplayFrames < fadeFrames) {
+      storyAlpha = map(storyDisplayFrames, fadeFrames, 0, 255, 0);
+    } else {
+      storyAlpha = 255;
+    }
+    
+    // Draw story text
+    fill(255, 255, 200, storyAlpha);
+    textAlign(CENTER);
+    textSize(16);
+    
+    String[] storyLines = {
+      "Em um futuro próximo, uma guerra global estoura",
+      "entre o Brasil e a China. O mundo assiste enquanto",
+      "tanques de guerra avançam pelas fronteiras destruídas.",
+      "",
+      "Você é o piloto de um tanque azul, lutando pelo Brasil.",
+      "Seu objetivo é simples: destruir os tanques vermelhos",
+      "inimigos antes que eles destruam você.",
+      "",
+      "A cada inimigo derrotado, um ponto. Quem fizer 5 pontos",
+      "primeiro, vence a batalha — e muda o destino da guerra."
+    };
+    
+    float startY = height/2 - (storyLines.length * 20) / 2;
+    for (int i = 0; i < storyLines.length; i++) {
+      text(storyLines[i], width/2, startY + i * 20);
+    }
+    
+    storyDisplayFrames--;
+    if (storyDisplayFrames == 0) {
+      showStory = false;
+    }
+    return;
+  }
+  
   game.update();
   game.render();
 }
