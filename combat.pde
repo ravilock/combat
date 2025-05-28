@@ -2,6 +2,7 @@
 // Refactored with Game class to manage all game state
 
 import java.time.LocalDateTime;
+import processing.sound.*;
 
 // Global game instance
 // Global game instance
@@ -18,7 +19,24 @@ float logoAlpha = 0; // For fade in/out
 void setup() {
   size(800, 600);
   studioLogo = loadImage(gameFilesBasePath + "campos-de-batalha-logo.png");
-  game = new Game();
+  SoundFile ricochetSound = null;
+  SoundFile shootSound = null;
+  SoundFile explosionSound = null;
+
+  try {
+    ricochetSound = new SoundFile(this, gameFilesBasePath + "ricochet.wav");
+    shootSound = new SoundFile(this, gameFilesBasePath + "shoot.wav");
+    explosionSound = new SoundFile(this, gameFilesBasePath + "explosion.wav");
+    println("Sound effects loaded successfully!");
+  } catch (Exception e) {
+    println("Warning: Could not load sound effects - " + e.getMessage());
+    println("Make sure these files exist in your sketch folder:");
+    println("  - ricochet.wav");
+    println("  - shoot.wav");
+    println("  - explosion.wav");
+  }
+
+  game = new Game(ricochetSound, shootSound, explosionSound);
   game.initialize();
 }
 
@@ -83,6 +101,11 @@ interface PlayerHitListener {
 
 // Main Game class - contains all game state and logic
 class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncreaser, PlayerHitListener {
+  // Sound effects
+  private SoundFile ricochetSound;
+  private SoundFile shootSound;
+  private SoundFile explosionSound;
+  
   // Key state tracking
   private boolean[] keys = new boolean[256];
   private boolean[] keyCodes = new boolean[256];
@@ -105,7 +128,10 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   // Player instances
   private Player player1, player2;
 
-  public Game() {
+  public Game(SoundFile ricochetSound, SoundFile shootSound, SoundFile explosionSound) {
+    this.ricochetSound = ricochetSound;
+    this.shootSound = shootSound;
+    this.explosionSound = explosionSound;
     // Constructor - initialize collections
     bullets = new ArrayList<Bullet>();
   }
@@ -297,6 +323,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     JSONObject p1Data = players.getJSONObject(0);
     JSONObject p1Pos = p1Data.getJSONObject("position");
     player1 = new Player(
+      shootSound,
       this,
       this,
       this,
@@ -310,6 +337,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
     JSONObject p2Data = players.getJSONObject(1);
     JSONObject p2Pos = p2Data.getJSONObject("position");
     player2 = new Player(
+      shootSound,
       this,
       this,
       this,
@@ -567,7 +595,7 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   }
 
   public void createBullet(float x, float y, float angle, int playerId) {
-    bullets.add(new Bullet(this, this, this, this, x, y, angle, playerId));
+    bullets.add(new Bullet(ricochetSound, explosionSound, this, this, this, this, x, y, angle, playerId));
   }
 
   // Getters for game state (used by Player and Bullet classes)
@@ -649,8 +677,9 @@ class Game implements BulletCreator, ObstacleProvider, PlayerProvider, ScoreIncr
   }
 }
 
-// Bullet class - now takes Game reference
 class Bullet {
+  private SoundFile ricochetSound;
+  private SoundFile explosionSound;
   private ObstacleProvider obstacleProvider;
   private PlayerProvider playerProvider;
   private ScoreIncreaser scoreIncreaser;
@@ -667,7 +696,9 @@ class Bullet {
   private int bounces = 0; // Track number of bounces
   private final int maxBounces = 4; // Maximum number of bounces allowed
 
-  public Bullet(ObstacleProvider obstacleProvider, PlayerProvider playerProvider, ScoreIncreaser scoreIncreaser, PlayerHitListener playerHitListener, float startX, float startY, float angle, int playerId) {
+  public Bullet(SoundFile ricochetSound, SoundFile explosionSound, ObstacleProvider obstacleProvider, PlayerProvider playerProvider, ScoreIncreaser scoreIncreaser, PlayerHitListener playerHitListener, float startX, float startY, float angle, int playerId) {
+    this.ricochetSound = ricochetSound;
+    this.explosionSound = explosionSound;
     this.obstacleProvider = obstacleProvider;
     this.playerProvider = playerProvider;
     this.scoreIncreaser = scoreIncreaser;
@@ -677,7 +708,7 @@ class Bullet {
     this.playerId = playerId;
     this.collider = new SphereCollider(x, y, size/2); // Radius is half the size
     this.bulletCreationTime = LocalDateTime.now();
-    
+
     // Calculate velocity components from angle and speed
     this.vX = cos(radians(angle)) * speed;
     this.vY = sin(radians(angle)) * speed;
@@ -706,6 +737,7 @@ class Bullet {
         vX = -vX; // Reflect velocity horizontally
         bounces++;
         bounced = true;
+        if (ricochetSound != null) ricochetSound.play();
         // Ensure bullet stays within bounds
         nextX = constrain(nextX, 20, width - 20);
       } else {
@@ -713,13 +745,14 @@ class Bullet {
         return;
       }
     }
-    
+
     // Check vertical bounds (top/bottom walls)
     if (nextY < 20 || nextY > height - 20) {
       if (bounces < maxBounces) {
         vY = -vY; // Reflect velocity vertically
         bounces++;
         bounced = true;
+        if (ricochetSound != null) ricochetSound.play();
         // Ensure bullet stays within bounds
         nextY = constrain(nextY, 20, height - 20);
       } else {
@@ -727,7 +760,7 @@ class Bullet {
         return;
       }
     }
-    
+
     // If we bounced off walls, update position and collider, then continue
     if (bounced) {
       x = nextX;
@@ -745,12 +778,12 @@ class Bullet {
             // Calculate bounce velocity based on obstacle type
             calculateBounceVelocity(obstacle, nextX, nextY);
             bounces++;
+            if (ricochetSound != null) ricochetSound.play();
             
             // Move bullet slightly away from obstacle to prevent getting stuck
             x += vX * 0.5;
             y += vY * 0.5;
             collider.updatePosition(x, y);
-            return; // Skip movement this frame
           } else {
             shouldRemove = true;
             return;
@@ -772,6 +805,7 @@ class Bullet {
       if (collider.isCollidingWith(player1.getCollider())) {
         scoreIncreaser.increaseScore(2); // Player 2 scores
         playerHitListener.onPlayerHit(1); // Notify player hit
+        if (explosionSound != null) explosionSound.play();
         shouldRemove = true;
         return;
       }
@@ -781,6 +815,7 @@ class Bullet {
       if (collider.isCollidingWith(player2.getCollider())) {
         scoreIncreaser.increaseScore(1); // Player 1 scores
         playerHitListener.onPlayerHit(2); // Notify player hit
+        if (explosionSound != null) explosionSound.play();
         shouldRemove = true;
         return;
       }
@@ -905,6 +940,7 @@ class Bullet {
 }
 
 class Player {
+  private SoundFile shootSound;
   private BulletCreator bulletCreator;
   private ObstacleProvider obstacleProvider;
   private PlayerProvider playerProvider;
@@ -920,7 +956,8 @@ class Player {
   private final int shootCooldownSeconds = 4; // Cooldown in seconds
   private RectangleCollider collider; // Use rectangle collider for players
 
-  Player(BulletCreator bulletCreator, ObstacleProvider obstacleProvider, PlayerProvider playerProvider, int id, float x, float y, float orientation) {
+  Player(SoundFile shootSound, BulletCreator bulletCreator, ObstacleProvider obstacleProvider, PlayerProvider playerProvider, int id, float x, float y, float orientation) {
+    this.shootSound = shootSound;
     this.bulletCreator = bulletCreator;
     this.obstacleProvider = obstacleProvider;
     this.playerProvider = playerProvider;
@@ -932,7 +969,6 @@ class Player {
     // Initialize velocity vectors
     updateVelocityVectors();
   }
-
   // Calculate velocity vector components based on current orientation
   private void updateVelocityVectors() {
     vX = cos(radians(orientation)) * speed;
@@ -1020,6 +1056,7 @@ class Player {
       float bulletY = y + vY * (size/2 + 5) / speed;
 
       bulletCreator.createBullet(bulletX, bulletY, orientation, id);
+      if (shootSound != null) shootSound.play();
       lastShotTime = now;
     }
   }
