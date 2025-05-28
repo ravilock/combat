@@ -656,8 +656,8 @@ class Bullet {
   private ScoreIncreaser scoreIncreaser;
   private PlayerHitListener playerHitListener;
   private float x, y;
-  private float angle;
-  private float speed = 4.0; // Slightly faster than player speed
+  private float speed = 4.0; // Vector intensity
+  private float vX, vY; // Velocity components
   private LocalDateTime bulletCreationTime;
   private final int maxBulletLifetime = 5; // Maximum lifetime in seconds
   private int playerId;
@@ -674,10 +674,13 @@ class Bullet {
     this.playerHitListener = playerHitListener;
     this.x = startX;
     this.y = startY;
-    this.angle = angle;
     this.playerId = playerId;
     this.collider = new SphereCollider(x, y, size/2); // Radius is half the size
     this.bulletCreationTime = LocalDateTime.now();
+    
+    // Calculate velocity components from angle and speed
+    this.vX = cos(radians(angle)) * speed;
+    this.vY = sin(radians(angle)) * speed;
   }
 
   public void update() {
@@ -690,9 +693,9 @@ class Bullet {
       return;
       }
     }
-    // Calculate next position
-    float nextX = x + cos(radians(angle)) * speed;
-    float nextY = y + sin(radians(angle)) * speed;
+    // Calculate next position using velocity components
+    float nextX = x + vX;
+    float nextY = y + vY;
     
     // Check bounds and handle bouncing
     boolean bounced = false;
@@ -700,7 +703,7 @@ class Bullet {
     // Check horizontal bounds (left/right walls)
     if (nextX < 20 || nextX > width - 20) {
       if (bounces < maxBounces) {
-        angle = 180 - angle; // Reflect horizontally
+        vX = -vX; // Reflect velocity horizontally
         bounces++;
         bounced = true;
         // Ensure bullet stays within bounds
@@ -714,7 +717,7 @@ class Bullet {
     // Check vertical bounds (top/bottom walls)
     if (nextY < 20 || nextY > height - 20) {
       if (bounces < maxBounces) {
-        angle = -angle; // Reflect vertically
+        vY = -vY; // Reflect velocity vertically
         bounces++;
         bounced = true;
         // Ensure bullet stays within bounds
@@ -739,14 +742,13 @@ class Bullet {
       for (Obstacle obstacle : currentObstacles) {
         if (obstacle.isCollidingWith(nextX, nextY, size)) {
           if (bounces < maxBounces) {
-            // Calculate bounce angle based on obstacle type
-            float bounceAngle = calculateBounceAngle(obstacle, nextX, nextY);
-            angle = bounceAngle;
+            // Calculate bounce velocity based on obstacle type
+            calculateBounceVelocity(obstacle, nextX, nextY);
             bounces++;
             
             // Move bullet slightly away from obstacle to prevent getting stuck
-            x += cos(radians(angle)) * 2;
-            y += sin(radians(angle)) * 2;
+            x += vX * 0.5;
+            y += vY * 0.5;
             collider.updatePosition(x, y);
             return; // Skip movement this frame
           } else {
@@ -785,23 +787,24 @@ class Bullet {
     }
   }
   
-  // Calculate bounce angle based on obstacle type and collision point
-  private float calculateBounceAngle(Obstacle obstacle, float bulletX, float bulletY) {
+  // Calculate bounce velocity based on obstacle type and collision point
+  private void calculateBounceVelocity(Obstacle obstacle, float bulletX, float bulletY) {
     String obstacleType = obstacle.getKind();
     
     if (obstacleType.equals("rectangle")) {
       RectangleObstacle rect = (RectangleObstacle) obstacle;
-      return calculateRectangleBounce(rect, bulletX, bulletY);
+      calculateRectangleBounceVelocity(rect, bulletX, bulletY);
     } else if (obstacleType.equals("sphere")) {
       SphereObstacle sphere = (SphereObstacle) obstacle;
-      return calculateSphereBounce(sphere, bulletX, bulletY);
+      calculateSphereBounceVelocity(sphere, bulletX, bulletY);
+    } else {
+      // Default: reverse velocity
+      vX = -vX;
+      vY = -vY;
     }
-    
-    // Default: reverse direction
-    return angle + 180;
   }
   
-  private float calculateRectangleBounce(RectangleObstacle rect, float bulletX, float bulletY) {
+  private void calculateRectangleBounceVelocity(RectangleObstacle rect, float bulletX, float bulletY) {
     // Get rectangle collider for position and size
     RectangleCollider rectCollider = (RectangleCollider) rect.collider;
     float rectX = rectCollider.getX();
@@ -823,17 +826,17 @@ class Bullet {
     
     float minDist = min(min(distToLeft, distToRight), min(distToTop, distToBottom));
     
-    // Reflect based on closest edge
+    // Reflect velocity based on closest edge
     if (minDist == distToLeft || minDist == distToRight) {
       // Hit left or right edge - reflect horizontally
-      return 180 - angle;
+      vX = -vX;
     } else {
       // Hit top or bottom edge - reflect vertically
-      return -angle;
+      vY = -vY;
     }
   }
   
-  private float calculateSphereBounce(SphereObstacle sphere, float bulletX, float bulletY) {
+  private void calculateSphereBounceVelocity(SphereObstacle sphere, float bulletX, float bulletY) {
     // Get sphere collider for position
     SphereCollider sphereCollider = (SphereCollider) sphere.collider;
     float sphereX = sphereCollider.getX();
@@ -850,17 +853,10 @@ class Bullet {
       normalY /= normalLength;
     }
     
-    // Convert current angle to velocity vector
-    float vx = cos(radians(angle));
-    float vy = sin(radians(angle));
-    
     // Reflect velocity using normal: v' = v - 2(v·n)n
-    float dotProduct = vx * normalX + vy * normalY;
-    float reflectedVx = vx - 2 * dotProduct * normalX;
-    float reflectedVy = vy - 2 * dotProduct * normalY;
-    
-    // Convert back to angle
-    return degrees(atan2(reflectedVy, reflectedVx));
+    float dotProduct = vX * normalX + vY * normalY;
+    vX = vX - 2 * dotProduct * normalX;
+    vY = vY - 2 * dotProduct * normalY;
   }
 
   public void display() {
@@ -880,14 +876,9 @@ class Bullet {
     }
     
     strokeWeight(1);
-    rectMode(CENTER);
     
-    // Draw bullet as small rotated square
-    pushMatrix();
-    translate(x, y);
-    rotate(radians(angle + 45)); // Rotate 45 degrees for diamond shape
-    rect(0, 0, size, size);
-    popMatrix();
+    // Draw bullet as circle
+    ellipse(x, y, size, size);
     
     // Draw bounce count indicator (small text above bullet)
     if (bounces > 0) {
@@ -905,6 +896,12 @@ class Bullet {
   public SphereCollider getCollider() {
     return collider;
   }
+
+  // Getter methods for velocity components and speed
+  public float getVX() { return vX; }
+  public float getVY() { return vY; }
+  public float getSpeed() { return speed; }
+  public float getCurrentSpeed() { return sqrt(vX * vX + vY * vY); }
 }
 
 class Player {
